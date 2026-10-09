@@ -150,16 +150,16 @@ HTML_TEMPLATE = r'''<!doctype html>
         <h2>Режим просмотра</h2>
         <select id="modeSelect">
           <option value="3d">3D-блок</option>
-          <option value="horizontal">Горизонтальный срез</option>
-          <option value="vertical-x">Вертикальный разрез по X</option>
-          <option value="vertical-y">Вертикальный разрез по Y</option>
+          <option value="vertical-x">Разрез по оси X</option>
+          <option value="vertical-y">Разрез по оси Y</option>
+          <option value="horizontal">Разрез по оси Z</option>
         </select>
       </div>
 
       <div class="control-group hidden" id="depthControls">
-        <h2>Глубина среза</h2>
+        <h2>Координата Z</h2>
         <input id="depthSlider" type="range" min="0" step="1" value="5">
-        <div class="range-line"><span>Глубина</span><span class="value-badge" id="depthValue"></span></div>
+        <div class="range-line"><span>Глубина Z</span><span class="value-badge" id="depthValue"></span></div>
       </div>
 
       <div class="control-group hidden" id="sliceControls">
@@ -230,6 +230,7 @@ HTML_TEMPLATE = r'''<!doctype html>
     const rockById = Object.fromEntries(MAP_DATA.rocks.map(rock => [rock.id, rock]));
     const depositById = Object.fromEntries(MAP_DATA.deposits.map(deposit => [deposit.id, deposit]));
     const cells = MAP_DATA.cells;
+    const VIEW_STEP_M = 1;
     const presentRockIds = new Set(
       cells.flatMap(cell => cell.intervals.map(interval => interval.rock_id))
     );
@@ -525,7 +526,7 @@ HTML_TEMPLATE = r'''<!doctype html>
       state.hitMap = null;
     }
 
-    function gridGeometry(columns, rows) {
+    function gridGeometry(columns, rows, horizontalStepM = VIEW_STEP_M) {
       const {width, height} = canvasSize();
       const padding = {left: 52, right: 24, top: 42, bottom: 48};
       const cellSize = Math.min(
@@ -536,42 +537,46 @@ HTML_TEMPLATE = r'''<!doctype html>
       const gridHeight = cellSize * rows;
       const left = padding.left + Math.max(0, (width - padding.left - padding.right - gridWidth) / 2);
       const top = padding.top + Math.max(0, (height - padding.top - padding.bottom - gridHeight) / 2);
-      return {left, top, cellSize, gridWidth, gridHeight, columns, rows};
+      return {left, top, cellSize, gridWidth, gridHeight, columns, rows, horizontalStepM};
     }
 
     function renderHorizontal() {
       const depthM = state.depthM;
-      const geometry = gridGeometry(dims.width_cells, dims.height_cells);
+      const geometry = gridGeometry(dims.width_m, dims.height_m);
+      const sourceCellSize = geometry.cellSize * dims.cell_size_m;
       for (let y = 0; y < dims.height_cells; y++) {
         for (let x = 0; x < dims.width_cells; x++) {
           const cell = cellAt(x, y);
           const interval = intervalAt(cell, depthM);
           const rock = rockById[interval.rock_id];
-          const sx = geometry.left + x * geometry.cellSize;
-          const sy = geometry.top + y * geometry.cellSize;
+          const sx = geometry.left + cell.x_m * geometry.cellSize;
+          const sy = geometry.top + cell.y_m * geometry.cellSize;
           ctx.fillStyle = state.visibleRocks.has(rock.id) ? rock.color : '#e5eaf0';
-          ctx.fillRect(sx, sy, geometry.cellSize + .3, geometry.cellSize + .3);
+          ctx.fillRect(sx, sy, sourceCellSize + .3, sourceCellSize + .3);
           const mineral = state.showDeposit ? mineralizationAt(cell, depthM) : null;
           if (mineral) {
             const alpha = 0.25 + 0.65 * depositStrength(mineral);
             ctx.fillStyle = rgba(depositFor(mineral).color, alpha);
-            ctx.fillRect(sx, sy, geometry.cellSize + .3, geometry.cellSize + .3);
+            ctx.fillRect(sx, sy, sourceCellSize + .3, sourceCellSize + .3);
           }
         }
       }
-      drawGridFrame(geometry, `Горизонтальный срез на глубине ${Math.round(depthM)} м`);
+      drawGridFrame(geometry, `Разрез по оси Z: глубина ${Math.round(depthM)} м`);
       state.hitMap = {type: 'horizontal', geometry, depthM};
     }
 
     function renderVertical(axis) {
-      const columns = axis === 'x' ? dims.height_cells : dims.width_cells;
+      const columns = axis === 'x' ? dims.height_m : dims.width_m;
+      const sourceColumns = axis === 'x' ? dims.height_cells : dims.width_cells;
       const maximumIndex = axis === 'x' ? dims.width_cells - 1 : dims.height_cells - 1;
       const sliceIndex = Math.min(
         maximumIndex,
         Math.floor(state.slicePositionM / dims.cell_size_m)
       );
-      const geometry = gridGeometry(columns, dims.depth_cells);
-      for (let horizontal = 0; horizontal < columns; horizontal++) {
+      const geometry = gridGeometry(columns, dims.depth_m);
+      const sourceWidth = geometry.cellSize * dims.cell_size_m;
+      const sourceHeight = geometry.cellSize * dims.depth_step_m;
+      for (let horizontal = 0; horizontal < sourceColumns; horizontal++) {
         const x = axis === 'x' ? sliceIndex : horizontal;
         const y = axis === 'x' ? horizontal : sliceIndex;
         const cell = cellAt(x, y);
@@ -579,15 +584,15 @@ HTML_TEMPLATE = r'''<!doctype html>
           const depthM = (z + 0.5) * dims.depth_step_m;
           const interval = intervalAt(cell, depthM);
           const rock = rockById[interval.rock_id];
-          const sx = geometry.left + horizontal * geometry.cellSize;
-          const sy = geometry.top + z * geometry.cellSize;
+          const sx = geometry.left + horizontal * dims.cell_size_m * geometry.cellSize;
+          const sy = geometry.top + z * dims.depth_step_m * geometry.cellSize;
           ctx.fillStyle = state.visibleRocks.has(rock.id) ? rock.color : '#e5eaf0';
-          ctx.fillRect(sx, sy, geometry.cellSize + .3, geometry.cellSize + .3);
+          ctx.fillRect(sx, sy, sourceWidth + .3, sourceHeight + .3);
           const mineral = state.showDeposit ? mineralizationAt(cell, depthM) : null;
           if (mineral) {
             const alpha = 0.25 + 0.65 * depositStrength(mineral);
             ctx.fillStyle = rgba(depositFor(mineral).color, alpha);
-            ctx.fillRect(sx, sy, geometry.cellSize + .3, geometry.cellSize + .3);
+            ctx.fillRect(sx, sy, sourceWidth + .3, sourceHeight + .3);
           }
         }
       }
@@ -597,29 +602,62 @@ HTML_TEMPLATE = r'''<!doctype html>
     }
 
     function drawGridFrame(geometry, title) {
-      ctx.strokeStyle = 'rgba(16,42,67,.28)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(geometry.left, geometry.top, geometry.gridWidth, geometry.gridHeight);
-      if (geometry.cellSize >= 7) {
-        ctx.strokeStyle = 'rgba(255,255,255,.24)';
-        ctx.lineWidth = .5;
-        for (let x = 1; x < geometry.columns; x++) {
-          const sx = geometry.left + x * geometry.cellSize;
-          ctx.beginPath(); ctx.moveTo(sx, geometry.top); ctx.lineTo(sx, geometry.top + geometry.gridHeight); ctx.stroke();
-        }
-        for (let y = 1; y < geometry.rows; y++) {
-          const sy = geometry.top + y * geometry.cellSize;
-          ctx.beginPath(); ctx.moveTo(geometry.left, sy); ctx.lineTo(geometry.left + geometry.gridWidth, sy); ctx.stroke();
-        }
+      function gridLine(vertical, positionM, strong) {
+        const position = vertical
+          ? geometry.left + positionM * geometry.cellSize
+          : geometry.top + positionM * geometry.cellSize;
+        const startX = vertical ? position : geometry.left;
+        const startY = vertical ? geometry.top : position;
+        const endX = vertical ? position : geometry.left + geometry.gridWidth;
+        const endY = vertical ? geometry.top + geometry.gridHeight : position;
+
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.strokeStyle = strong ? 'rgba(255,255,255,.62)' : 'rgba(255,255,255,.38)';
+        ctx.lineWidth = strong ? 2.2 : 1.4;
+        ctx.stroke();
+        ctx.strokeStyle = strong ? 'rgba(16,42,67,.62)' : 'rgba(16,42,67,.32)';
+        ctx.lineWidth = strong ? 1.15 : .65;
+        ctx.stroke();
       }
+
+      for (let x = 10; x < geometry.columns; x += 10) {
+        gridLine(true, x, x % 50 === 0);
+      }
+      for (let y = 10; y < geometry.rows; y += 10) {
+        gridLine(false, y, y % 50 === 0);
+      }
+
+      ctx.strokeStyle = 'rgba(16,42,67,.72)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(geometry.left, geometry.top, geometry.gridWidth, geometry.gridHeight);
       ctx.fillStyle = '#102a43';
       ctx.font = '600 13px system-ui, sans-serif';
       ctx.fillText(title, geometry.left, geometry.top - 15);
       ctx.fillStyle = '#627d98';
       ctx.font = '11px system-ui, sans-serif';
       ctx.fillText('0 м', geometry.left - 2, geometry.top + geometry.gridHeight + 22);
+      const labelStep = geometry.cellSize * 50 >= 42 ? 50 : 100;
+      ctx.textAlign = 'center';
+      for (let x = labelStep; x < geometry.columns; x += labelStep) {
+        ctx.fillText(
+          `${x} м`,
+          geometry.left + x * geometry.cellSize,
+          geometry.top + geometry.gridHeight + 22
+        );
+      }
       ctx.textAlign = 'right';
-      ctx.fillText(`${geometry.columns * dims.cell_size_m} м`, geometry.left + geometry.gridWidth, geometry.top + geometry.gridHeight + 22);
+      ctx.fillText(`${geometry.columns * geometry.horizontalStepM} м`, geometry.left + geometry.gridWidth, geometry.top + geometry.gridHeight + 22);
+      ctx.textBaseline = 'middle';
+      for (let y = labelStep; y < geometry.rows; y += labelStep) {
+        ctx.fillText(
+          `${y} м`,
+          geometry.left - 8,
+          geometry.top + y * geometry.cellSize
+        );
+      }
+      ctx.textBaseline = 'alphabetic';
       ctx.textAlign = 'left';
     }
 
@@ -644,19 +682,19 @@ HTML_TEMPLATE = r'''<!doctype html>
       }
       const titles = {
         '3d': 'Трёхмерная блочная модель',
-        'horizontal': 'Горизонтальный срез',
-        'vertical-x': 'Вертикальный разрез по X',
-        'vertical-y': 'Вертикальный разрез по Y'
+        'horizontal': 'Разрез по оси Z — плоскость X–Y',
+        'vertical-x': 'Разрез по оси X — плоскость Y–Z',
+        'vertical-y': 'Разрез по оси Y — плоскость X–Z'
       };
       viewTitle.textContent = titles[state.mode];
       canvasHint.textContent = is3D
         ? 'Перетаскивайте мышью для вращения, колесом меняйте масштаб.'
-        : 'Нажмите на ячейку, чтобы увидеть породу, свойства и концентрацию.';
+        : 'Выбор — 1 м; линии сетки — 10 м, усиленные линии — 50 м.';
       canvas.style.cursor = is3D ? 'grab' : 'crosshair';
       requestRender();
     }
 
-    function showCellInfo(cell, depthM) {
+    function showCellInfo(cell, depthM, pointX, pointY) {
       const interval = intervalAt(cell, depthM);
       const rock = rockById[interval.rock_id];
       const mineral = mineralizationAt(cell, depthM);
@@ -673,8 +711,8 @@ HTML_TEMPLATE = r'''<!doctype html>
       cellInfo.innerHTML = `
         <strong>${title}</strong>
         <div class="info-grid">
-          <span>Ячейка</span><b>(${cell.x_index}, ${cell.y_index})</b>
-          <span>Координаты</span><b>${cell.x_m}-${cell.x_m + dims.cell_size_m} / ${cell.y_m}-${cell.y_m + dims.cell_size_m} м</b>
+          <span>Точка 1 × 1 м</span><b>X ${pointX}-${Math.min(pointX + VIEW_STEP_M, dims.width_m)} / Y ${pointY}-${Math.min(pointY + VIEW_STEP_M, dims.height_m)} м</b>
+          <span>Исходная ячейка</span><b>(${cell.x_index}, ${cell.y_index}), ${dims.cell_size_m} × ${dims.cell_size_m} м</b>
           <span>Глубина</span><b>${Math.round(depthM)} м</b>
           <span>Интервал</span><b>${interval.from_depth_m}-${interval.to_depth_m} м</b>
           ${mineralRows}
@@ -693,17 +731,21 @@ HTML_TEMPLATE = r'''<!doctype html>
       const row = Math.floor((mouseY - geometry.top) / geometry.cellSize);
       if (column < 0 || row < 0 || column >= geometry.columns || row >= geometry.rows) return;
       if (state.hitMap.type === 'horizontal') {
-        showCellInfo(cellAt(column, row), state.hitMap.depthM);
+        const cell = cellAt(
+          Math.floor(column / dims.cell_size_m),
+          Math.floor(row / dims.cell_size_m)
+        );
+        showCellInfo(cell, state.hitMap.depthM, column, row);
         return;
       }
-      const depthM = Math.min(
-        dims.depth_m - 1,
-        Math.floor((mouseY - geometry.top) / geometry.gridHeight * dims.depth_m)
-      );
+      const depthM = Math.min(dims.depth_m - 1, row);
+      const horizontalIndex = Math.floor(column / dims.cell_size_m);
       const cell = state.hitMap.axis === 'x'
-        ? cellAt(state.hitMap.sliceIndex, column)
-        : cellAt(column, state.hitMap.sliceIndex);
-      showCellInfo(cell, depthM);
+        ? cellAt(state.hitMap.sliceIndex, horizontalIndex)
+        : cellAt(horizontalIndex, state.hitMap.sliceIndex);
+      const pointX = state.hitMap.axis === 'x' ? state.slicePositionM : column;
+      const pointY = state.hitMap.axis === 'x' ? column : state.slicePositionM;
+      showCellInfo(cell, depthM, pointX, pointY);
     }
 
     function buildLegend() {

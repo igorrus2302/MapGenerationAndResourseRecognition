@@ -151,12 +151,15 @@ class GeneratorTests(unittest.TestCase):
             loaded = json.loads(json_path.read_text(encoding="utf-8"))
             html = html_path.read_text(encoding="utf-8")
             self.assertEqual(loaded["schema_version"], "1.2")
-            self.assertIn("Горизонтальный срез", html)
+            self.assertIn("Разрез по оси Z", html)
             self.assertIn("vertical-x", html)
             self.assertIn("const presentRocks", html)
             self.assertIn("Порода-носитель", html)
             self.assertIn("slicePositionM", html)
             self.assertIn("depthM: Math.min(5", html)
+            self.assertIn("const VIEW_STEP_M = 1", html)
+            self.assertIn("Точка 1 × 1 м", html)
+            self.assertIn("усиленные линии — 50 м", html)
             self.assertIn('"map_kind":"synthetic_ground_truth"', html)
 
 
