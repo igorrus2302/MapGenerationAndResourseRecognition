@@ -1,0 +1,38 @@
+{
+  "map": {
+    "width_cells": 40,
+    "height_cells": 40,
+    "depth_cells": 30,
+    "cell_size_m": 10,
+    "depth_step_m": 10
+  },
+  "geology": {
+    "layer_count": [5, 7],
+    "surface_rock_id": "soil",
+    "subsurface_rock_ids": [
+      "stone",
+      "sandstone",
+      "red_sandstone",
+      "clay",
+      "limestone",
+      "granite",
+      "diorite",
+      "andesite",
+      "deepslate",
+      "tuff",
+      "calcite",
+      "dripstone",
+      "basalt",
+      "blackstone",
+      "obsidian"
+    ],
+    "surface_thickness_m": [10, 30],
+    "minimum_layer_thickness_m": 20,
+    "boundary_variation_m": [5, 25],
+    "wave_x": [0.06, 0.18],
+    "wave_y": [0.06, 0.18]
+  },
+  "deposit_generation": {
+    "count": [2, 4]
+  }
+}

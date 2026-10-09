@@ -1,0 +1,148 @@
+{
+  "rocks": [
+    {
+      "id": "soil",
+      "name": "Почва",
+      "category": "surface",
+      "minecraft_analogue": "Dirt",
+      "color": "#7A5A3A",
+      "density_g_cm3": [1.2, 1.8],
+      "porosity_percent": [30.0, 55.0]
+    },
+    {
+      "id": "stone",
+      "name": "Каменная порода",
+      "category": "igneous",
+      "minecraft_analogue": "Stone",
+      "color": "#888888",
+      "density_g_cm3": [2.4, 2.8],
+      "porosity_percent": [0.5, 6.0]
+    },
+    {
+      "id": "granite",
+      "name": "Гранит",
+      "category": "igneous",
+      "minecraft_analogue": "Granite",
+      "color": "#A66A55",
+      "density_g_cm3": [2.63, 2.75],
+      "porosity_percent": [0.1, 2.0]
+    },
+    {
+      "id": "diorite",
+      "name": "Диорит",
+      "category": "igneous",
+      "minecraft_analogue": "Diorite",
+      "color": "#D5D2CC",
+      "density_g_cm3": [2.75, 3.0],
+      "porosity_percent": [0.1, 3.0]
+    },
+    {
+      "id": "andesite",
+      "name": "Андезит",
+      "category": "igneous",
+      "minecraft_analogue": "Andesite",
+      "color": "#777B78",
+      "density_g_cm3": [2.4, 2.8],
+      "porosity_percent": [0.5, 8.0]
+    },
+    {
+      "id": "deepslate",
+      "name": "Глубинный сланец",
+      "category": "metamorphic",
+      "minecraft_analogue": "Deepslate",
+      "color": "#45494A",
+      "density_g_cm3": [2.7, 2.9],
+      "porosity_percent": [0.2, 3.0]
+    },
+    {
+      "id": "tuff",
+      "name": "Туф",
+      "category": "volcanic",
+      "minecraft_analogue": "Tuff",
+      "color": "#6F776F",
+      "density_g_cm3": [1.8, 2.6],
+      "porosity_percent": [5.0, 30.0]
+    },
+    {
+      "id": "calcite",
+      "name": "Кальцитовая порода",
+      "category": "carbonate",
+      "minecraft_analogue": "Calcite",
+      "color": "#E8E1CF",
+      "density_g_cm3": [2.6, 2.75],
+      "porosity_percent": [1.0, 8.0]
+    },
+    {
+      "id": "dripstone",
+      "name": "Натёчный известняк",
+      "category": "carbonate",
+      "minecraft_analogue": "Dripstone Block",
+      "color": "#9A6A4B",
+      "density_g_cm3": [2.3, 2.7],
+      "porosity_percent": [5.0, 20.0]
+    },
+    {
+      "id": "limestone",
+      "name": "Известняк",
+      "category": "sedimentary",
+      "minecraft_analogue": "Calcite",
+      "color": "#C9C7B8",
+      "density_g_cm3": [2.3, 2.75],
+      "porosity_percent": [1.0, 25.0]
+    },
+    {
+      "id": "sandstone",
+      "name": "Песчаник",
+      "category": "sedimentary",
+      "minecraft_analogue": "Sandstone",
+      "color": "#D8B46A",
+      "density_g_cm3": [2.0, 2.6],
+      "porosity_percent": [5.0, 30.0]
+    },
+    {
+      "id": "red_sandstone",
+      "name": "Красный песчаник",
+      "category": "sedimentary",
+      "minecraft_analogue": "Red Sandstone",
+      "color": "#B85F32",
+      "density_g_cm3": [2.1, 2.6],
+      "porosity_percent": [6.0, 28.0]
+    },
+    {
+      "id": "clay",
+      "name": "Глина",
+      "category": "sedimentary",
+      "minecraft_analogue": "Clay",
+      "color": "#8290A2",
+      "density_g_cm3": [1.6, 2.4],
+      "porosity_percent": [15.0, 50.0]
+    },
+    {
+      "id": "basalt",
+      "name": "Базальт",
+      "category": "volcanic",
+      "minecraft_analogue": "Basalt",
+      "color": "#4B4A4F",
+      "density_g_cm3": [2.8, 3.1],
+      "porosity_percent": [0.2, 5.0]
+    },
+    {
+      "id": "blackstone",
+      "name": "Чёрный вулканит",
+      "category": "volcanic",
+      "minecraft_analogue": "Blackstone",
+      "color": "#302D35",
+      "density_g_cm3": [2.7, 3.1],
+      "porosity_percent": [0.1, 4.0]
+    },
+    {
+      "id": "obsidian",
+      "name": "Обсидиан",
+      "category": "volcanic_glass",
+      "minecraft_analogue": "Obsidian",
+      "color": "#292342",
+      "density_g_cm3": [2.3, 2.6],
+      "porosity_percent": [0.0, 1.0]
+    }
+  ]
+}

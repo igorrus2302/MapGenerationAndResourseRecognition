@@ -1,0 +1,108 @@
+{
+  "minerals": [
+    {
+      "id": "copper",
+      "name": "Медное месторождение",
+      "mineral": "Cu",
+      "minecraft_analogue": "Copper Ore",
+      "color": "#F15A29",
+      "weight": 1.4,
+      "radius_x_m": [60, 130],
+      "radius_y_m": [50, 110],
+      "radius_z_m": [25, 65],
+      "max_concentration_percent": [1.5, 5.0],
+      "display_threshold_percent": 0.15
+    },
+    {
+      "id": "iron",
+      "name": "Железорудное месторождение",
+      "mineral": "Fe",
+      "minecraft_analogue": "Iron Ore",
+      "color": "#A84F3D",
+      "weight": 2.0,
+      "radius_x_m": [70, 150],
+      "radius_y_m": [50, 130],
+      "radius_z_m": [30, 80],
+      "max_concentration_percent": [25.0, 65.0],
+      "display_threshold_percent": 5.0
+    },
+    {
+      "id": "gold",
+      "name": "Золоторудное месторождение",
+      "mineral": "Au",
+      "minecraft_analogue": "Gold Ore",
+      "color": "#E8B923",
+      "weight": 0.45,
+      "radius_x_m": [30, 70],
+      "radius_y_m": [25, 65],
+      "radius_z_m": [15, 35],
+      "max_concentration_percent": [0.02, 0.2],
+      "display_threshold_percent": 0.005
+    },
+    {
+      "id": "coal",
+      "name": "Угольный пласт",
+      "mineral": "Coal",
+      "minecraft_analogue": "Coal Ore",
+      "color": "#2E3338",
+      "weight": 1.5,
+      "radius_x_m": [90, 180],
+      "radius_y_m": [60, 150],
+      "radius_z_m": [8, 25],
+      "max_concentration_percent": [35.0, 80.0],
+      "display_threshold_percent": 10.0
+    },
+    {
+      "id": "diamond",
+      "name": "Алмазоносное месторождение",
+      "mineral": "Diamond",
+      "minecraft_analogue": "Diamond Ore",
+      "color": "#52D6CE",
+      "weight": 0.18,
+      "radius_x_m": [18, 45],
+      "radius_y_m": [15, 40],
+      "radius_z_m": [10, 30],
+      "max_concentration_percent": [0.01, 0.08],
+      "display_threshold_percent": 0.002
+    },
+    {
+      "id": "emerald",
+      "name": "Изумрудоносное месторождение",
+      "mineral": "Emerald",
+      "minecraft_analogue": "Emerald Ore",
+      "color": "#35B96B",
+      "weight": 0.12,
+      "radius_x_m": [15, 40],
+      "radius_y_m": [15, 35],
+      "radius_z_m": [10, 25],
+      "max_concentration_percent": [0.02, 0.15],
+      "display_threshold_percent": 0.004
+    },
+    {
+      "id": "bauxite",
+      "name": "Бокситовое месторождение",
+      "mineral": "Al₂O₃",
+      "minecraft_analogue": "—",
+      "color": "#B85E45",
+      "weight": 0.8,
+      "radius_x_m": [70, 150],
+      "radius_y_m": [60, 130],
+      "radius_z_m": [10, 35],
+      "max_concentration_percent": [35.0, 60.0],
+      "display_threshold_percent": 10.0
+    },
+    {
+      "id": "uranium",
+      "name": "Урановое месторождение",
+      "mineral": "U₃O₈",
+      "minecraft_analogue": "—",
+      "color": "#9ACD32",
+      "weight": 0.25,
+      "radius_x_m": [25, 65],
+      "radius_y_m": [20, 55],
+      "radius_z_m": [15, 40],
+      "max_concentration_percent": [0.05, 1.2],
+      "display_threshold_percent": 0.02
+    }
+  ]
+}
