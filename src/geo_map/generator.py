@@ -74,12 +74,38 @@ def _validate_config(config: dict[str, Any]) -> None:
     ):
         raise ValueError("Количество слоёв должно быть целым и не меньше двух")
     surface_id = geology.get("surface_rock_id")
-    subsurface_ids = geology.get("subsurface_rock_ids", [])
+    stratigraphic_groups = geology.get("stratigraphic_groups", [])
+    if not stratigraphic_groups:
+        raise ValueError("Нужна хотя бы одна стратиграфическая группа")
+    group_ids = [group["id"] for group in stratigraphic_groups]
+    if len(group_ids) != len(set(group_ids)):
+        raise ValueError("Идентификаторы стратиграфических групп должны быть уникальными")
+
+    subsurface_ids: list[str] = []
+    minimum_subsurface_layers = 0
+    for index, group in enumerate(stratigraphic_groups):
+        group_rock_ids = group.get("rock_ids", [])
+        if not group_rock_ids:
+            raise ValueError(f"Стратиграфическая группа {group_ids[index]} не может быть пустой")
+        minimum_layers = group.get("minimum_layers", 1)
+        if not isinstance(minimum_layers, int) or minimum_layers < 0:
+            raise ValueError("minimum_layers должен быть неотрицательным целым числом")
+        if minimum_layers > len(group_rock_ids):
+            raise ValueError("minimum_layers не может превышать число пород в группе")
+        minimum_subsurface_layers += minimum_layers
+        subsurface_ids.extend(group_rock_ids)
+
+    if len(subsurface_ids) != len(set(subsurface_ids)):
+        raise ValueError("Одна порода не может входить в несколько стратиграфических групп")
     unknown_ids = {surface_id, *subsurface_ids} - set(rock_ids)
     if unknown_ids:
         raise ValueError(f"Неизвестные породы в настройках генерации: {sorted(unknown_ids)}")
-    if not subsurface_ids:
-        raise ValueError("Нужна хотя бы одна подземная порода")
+    if surface_id in subsurface_ids:
+        raise ValueError("Поверхностная порода не должна входить в подземные группы")
+    if int(layer_low) - 1 < minimum_subsurface_layers:
+        raise ValueError("Минимального числа слоёв недостаточно для обязательных групп")
+    if int(layer_high) - 1 > len(subsurface_ids):
+        raise ValueError("Максимальное число слоёв превышает число доступных пород")
 
     total_depth = map_config["depth_cells"] * map_config["depth_step_m"]
     _, surface_high = _range_pair(
@@ -104,6 +130,19 @@ def _validate_config(config: dict[str, Any]) -> None:
         or int(count_low) < 0
     ):
         raise ValueError("Количество месторождений не может быть отрицательным")
+    for key in (
+        "shape_irregularity",
+        "vertical_irregularity",
+        "noise_scale_cells",
+        "concentration_variation",
+    ):
+        low, high = _range_pair(
+            deposit_generation.get(key), f"deposit_generation.{key}"
+        )
+        if low <= 0:
+            raise ValueError(f"Параметр deposit_generation.{key} должен быть положительным")
+        if key != "noise_scale_cells" and high >= 1:
+            raise ValueError(f"Параметр deposit_generation.{key} должен быть меньше 1")
     minerals = config["minerals"]
     if not minerals and count_low > 0:
         raise ValueError("Для генерации месторождений нужен хотя бы один тип")
@@ -118,6 +157,13 @@ def _validate_config(config: dict[str, Any]) -> None:
     for index, mineral in enumerate(minerals):
         if float(mineral.get("weight", 0)) <= 0:
             raise ValueError(f"minerals[{index}].weight должен быть положительным")
+        depth_low, depth_high = _range_pair(
+            mineral.get("allowed_depth_m"), f"minerals[{index}].allowed_depth_m"
+        )
+        if depth_low < 0 or depth_high > total_depth or depth_low == depth_high:
+            raise ValueError(
+                "Допустимая глубина ископаемого должна находиться внутри карты"
+            )
         for key in (
             "radius_x_m",
             "radius_y_m",
@@ -127,6 +173,13 @@ def _validate_config(config: dict[str, Any]) -> None:
             low, _ = _range_pair(mineral.get(key), f"minerals[{index}].{key}")
             if low <= 0:
                 raise ValueError(f"Диапазон {key} должен быть положительным")
+        _, radius_z_high = _range_pair(
+            mineral.get("radius_z_m"), f"minerals[{index}].radius_z_m"
+        )
+        if radius_z_high * 2 > depth_high - depth_low:
+            raise ValueError(
+                "Вертикальный радиус месторождения не помещается в допустимый диапазон глубины"
+            )
 
 
 def _stable_unit(seed: int, *parts: object) -> float:
@@ -135,6 +188,44 @@ def _stable_unit(seed: int, *parts: object) -> float:
     digest = hashlib.sha256(payload).digest()
     integer = int.from_bytes(digest[:8], "big")
     return integer / ((1 << 64) - 1)
+
+
+def _smooth_noise_2d(
+    seed: int,
+    x: float,
+    y: float,
+    scale: float,
+    *parts: object,
+) -> float:
+    """Deterministic smoothly interpolated value noise in [0, 1]."""
+    grid_x = x / scale
+    grid_y = y / scale
+    x0 = math.floor(grid_x)
+    y0 = math.floor(grid_y)
+    fraction_x = grid_x - x0
+    fraction_y = grid_y - y0
+    fade_x = fraction_x * fraction_x * (3 - 2 * fraction_x)
+    fade_y = fraction_y * fraction_y * (3 - 2 * fraction_y)
+
+    value_00 = _stable_unit(seed, "smooth-noise", *parts, x0, y0)
+    value_10 = _stable_unit(seed, "smooth-noise", *parts, x0 + 1, y0)
+    value_01 = _stable_unit(seed, "smooth-noise", *parts, x0, y0 + 1)
+    value_11 = _stable_unit(seed, "smooth-noise", *parts, x0 + 1, y0 + 1)
+    top = value_00 + (value_10 - value_00) * fade_x
+    bottom = value_01 + (value_11 - value_01) * fade_x
+    return top + (bottom - top) * fade_y
+
+
+def _fractal_noise_2d(
+    seed: int,
+    x: float,
+    y: float,
+    scale: float,
+    *parts: object,
+) -> float:
+    coarse = _smooth_noise_2d(seed, x, y, scale, *parts, "coarse")
+    detail = _smooth_noise_2d(seed, x, y, max(0.75, scale * 0.43), *parts, "detail")
+    return 0.72 * coarse + 0.28 * detail
 
 
 def _sample_range(seed: int, low: float, high: float, *parts: object) -> float:
@@ -173,6 +264,47 @@ def _partition_steps(
     return [minimum_steps + value for value in allocated]
 
 
+def _select_stratified_rocks(
+    geology: dict[str, Any],
+    layer_count: int,
+    seed: int,
+) -> list[tuple[str, str]]:
+    """Choose unique rocks while preserving the configured shallow-to-deep order."""
+    groups = geology["stratigraphic_groups"]
+    counts = [int(group.get("minimum_layers", 1)) for group in groups]
+    remaining = layer_count - sum(counts)
+
+    for allocation_index in range(remaining):
+        available_groups = [
+            index
+            for index, group in enumerate(groups)
+            if counts[index] < len(group["rock_ids"])
+        ]
+        selected_index = _sample_int(
+            seed,
+            0,
+            len(available_groups) - 1,
+            "stratigraphy-allocation",
+            allocation_index,
+        )
+        counts[available_groups[selected_index]] += 1
+
+    selected: list[tuple[str, str]] = []
+    for group, count in zip(groups, counts, strict=True):
+        available_rocks = list(group["rock_ids"])
+        for position in range(count):
+            selected_index = _sample_int(
+                seed,
+                0,
+                len(available_rocks) - 1,
+                "stratigraphy-rock",
+                group["id"],
+                position,
+            )
+            selected.append((available_rocks.pop(selected_index), group["id"]))
+    return selected
+
+
 def _generate_layers(config: dict[str, Any], seed: int) -> list[dict[str, Any]]:
     map_config = config["map"]
     geology = config["geology"]
@@ -196,29 +328,23 @@ def _generate_layers(config: dict[str, Any], seed: int) -> list[dict[str, Any]]:
     )
     thicknesses = [surface_steps, *subsurface_thicknesses]
 
-    rock_sequence = [geology["surface_rock_id"]]
-    candidates = list(geology["subsurface_rock_ids"])
-    unused_candidates = candidates.copy()
-    for index in range(1, layer_count):
-        if not unused_candidates:
-            unused_candidates = candidates.copy()
-        available = [
-            rock_id for rock_id in unused_candidates if rock_id != rock_sequence[-1]
-        ] or unused_candidates
-        selected = _sample_int(seed, 0, len(available) - 1, "layer-rock", index)
-        selected_rock = available[selected]
-        rock_sequence.append(selected_rock)
-        unused_candidates.remove(selected_rock)
+    rock_sequence = [
+        (geology["surface_rock_id"], "surface"),
+        *_select_stratified_rocks(geology, layer_count - 1, seed),
+    ]
 
     variation_low, variation_high = geology["boundary_variation_m"]
     wave_x_low, wave_x_high = geology["wave_x"]
     wave_y_low, wave_y_high = geology["wave_y"]
     layers: list[dict[str, Any]] = []
     bottom_steps = 0
-    for index, (rock_id, thickness_steps) in enumerate(zip(rock_sequence, thicknesses, strict=True)):
+    for index, ((rock_id, group_id), thickness_steps) in enumerate(
+        zip(rock_sequence, thicknesses, strict=True)
+    ):
         bottom_steps += thickness_steps
         layer: dict[str, Any] = {
             "rock_id": rock_id,
+            "stratigraphic_group": group_id,
             "base_bottom_depth_m": bottom_steps * step,
         }
         if index < layer_count - 1:
@@ -343,16 +469,17 @@ def _select_deposit_types(
     return selected
 
 
-def _center_inside_extent(
+def _center_inside_range(
     seed: int,
-    extent: float,
+    range_low: float,
+    range_high: float,
     radius: float,
     axis: str,
     deposit_index: int,
 ) -> float:
-    usable_radius = min(radius, extent / 2)
-    low = usable_radius
-    high = extent - usable_radius
+    usable_radius = min(radius, (range_high - range_low) / 2)
+    low = range_low + usable_radius
+    high = range_high - usable_radius
     return round(_sample_range(seed, low, high, "deposit-center", deposit_index, axis), 2)
 
 
@@ -365,23 +492,73 @@ def _generate_deposits(config: dict[str, Any], seed: int) -> list[dict[str, Any]
     selected_types = _select_deposit_types(seed, types, count)
     width_m = map_config["width_cells"] * map_config["cell_size_m"]
     height_m = map_config["height_cells"] * map_config["cell_size_m"]
-    depth_m = map_config["depth_cells"] * map_config["depth_step_m"]
     deposits: list[dict[str, Any]] = []
 
     for index, definition in enumerate(selected_types):
-        radius_x = min(
-            width_m / 2,
-            _sample_range(seed, *definition["radius_x_m"], "deposit-radius", index, "x"),
+        depth_low, depth_high = definition["allowed_depth_m"]
+        radius_x = round(
+            min(
+                width_m / 2,
+                _sample_range(seed, *definition["radius_x_m"], "deposit-radius", index, "x"),
+            ),
+            2,
         )
-        radius_y = min(
-            height_m / 2,
-            _sample_range(seed, *definition["radius_y_m"], "deposit-radius", index, "y"),
+        radius_y = round(
+            min(
+                height_m / 2,
+                _sample_range(seed, *definition["radius_y_m"], "deposit-radius", index, "y"),
+            ),
+            2,
         )
-        radius_z = min(
-            depth_m / 2,
-            _sample_range(seed, *definition["radius_z_m"], "deposit-radius", index, "z"),
+        radius_z = round(
+            min(
+                (depth_high - depth_low) / 2,
+                _sample_range(seed, *definition["radius_z_m"], "deposit-radius", index, "z"),
+            ),
+            2,
         )
         deposit_number = index + 1
+        shape = {
+            "rotation_deg": round(
+                _sample_range(seed, 0, 180, "deposit-rotation", index), 2
+            ),
+            "irregularity": round(
+                _sample_range(
+                    seed,
+                    *generation["shape_irregularity"],
+                    "deposit-irregularity",
+                    index,
+                ),
+                3,
+            ),
+            "vertical_irregularity": round(
+                _sample_range(
+                    seed,
+                    *generation["vertical_irregularity"],
+                    "deposit-vertical-irregularity",
+                    index,
+                ),
+                3,
+            ),
+            "noise_scale_cells": round(
+                _sample_range(
+                    seed,
+                    *generation["noise_scale_cells"],
+                    "deposit-noise-scale",
+                    index,
+                ),
+                3,
+            ),
+            "concentration_variation": round(
+                _sample_range(
+                    seed,
+                    *generation["concentration_variation"],
+                    "deposit-concentration-variation",
+                    index,
+                ),
+                3,
+            ),
+        }
         deposits.append(
             {
                 "id": f"{definition['id']}_deposit_{deposit_number}",
@@ -389,12 +566,16 @@ def _generate_deposits(config: dict[str, Any], seed: int) -> list[dict[str, Any]
                 "name": f"{definition['name']} №{deposit_number}",
                 "mineral": definition["mineral"],
                 "color": definition["color"],
+                "allowed_depth_m": definition["allowed_depth_m"],
                 "center_m": [
-                    _center_inside_extent(seed, width_m, radius_x, "x", index),
-                    _center_inside_extent(seed, height_m, radius_y, "y", index),
-                    _center_inside_extent(seed, depth_m, radius_z, "z", index),
+                    _center_inside_range(seed, 0, width_m, radius_x, "x", index),
+                    _center_inside_range(seed, 0, height_m, radius_y, "y", index),
+                    _center_inside_range(
+                        seed, depth_low, depth_high, radius_z, "z", index
+                    ),
                 ],
-                "radii_m": [round(radius_x, 2), round(radius_y, 2), round(radius_z, 2)],
+                "radii_m": [radius_x, radius_y, radius_z],
+                "shape": shape,
                 "max_concentration_percent": round(
                     _sample_range(
                         seed,
@@ -416,6 +597,7 @@ def _deposits_for_cell(
     deposits: list[dict[str, Any]],
     x_index: int,
     y_index: int,
+    seed: int,
 ) -> list[dict[str, Any]]:
     cell_size = map_config["cell_size_m"]
     total_depth = map_config["depth_cells"] * map_config["depth_step_m"]
@@ -426,17 +608,66 @@ def _deposits_for_cell(
     for deposit in deposits:
         center_x, center_y, center_z = deposit["center_m"]
         radius_x, radius_y, radius_z = deposit["radii_m"]
-        horizontal_distance = ((x - center_x) / radius_x) ** 2 + ((y - center_y) / radius_y) ** 2
+        shape = deposit["shape"]
+        angle = math.radians(shape["rotation_deg"])
+        delta_x = x - center_x
+        delta_y = y - center_y
+        rotated_x = delta_x * math.cos(angle) + delta_y * math.sin(angle)
+        rotated_y = -delta_x * math.sin(angle) + delta_y * math.cos(angle)
+        boundary_noise = _fractal_noise_2d(
+            seed,
+            x_index,
+            y_index,
+            shape["noise_scale_cells"],
+            deposit["id"],
+            "boundary",
+        )
+        boundary_scale = 1 - shape["irregularity"] * (1 - boundary_noise)
+        horizontal_distance = (
+            (rotated_x / (radius_x * boundary_scale)) ** 2
+            + (rotated_y / (radius_y * boundary_scale)) ** 2
+        )
         if horizontal_distance >= 1:
             continue
 
         half_height = radius_z * math.sqrt(1 - horizontal_distance)
-        top = max(0.0, center_z - half_height)
-        bottom = min(float(total_depth), center_z + half_height)
+        top_noise = _fractal_noise_2d(
+            seed,
+            x_index,
+            y_index,
+            shape["noise_scale_cells"],
+            deposit["id"],
+            "top",
+        )
+        bottom_noise = _fractal_noise_2d(
+            seed,
+            x_index,
+            y_index,
+            shape["noise_scale_cells"],
+            deposit["id"],
+            "bottom",
+        )
+        top_factor = 1 - shape["vertical_irregularity"] * (1 - top_noise)
+        bottom_factor = 1 - shape["vertical_irregularity"] * (1 - bottom_noise)
+        top = max(0.0, center_z - half_height * top_factor)
+        bottom = min(float(total_depth), center_z + half_height * bottom_factor)
         if bottom <= top:
             continue
 
-        max_grade = deposit["max_concentration_percent"] * (1 - horizontal_distance)
+        grade_noise = _fractal_noise_2d(
+            seed,
+            x_index,
+            y_index,
+            shape["noise_scale_cells"],
+            deposit["id"],
+            "grade",
+        )
+        grade_factor = 1 - shape["concentration_variation"] * (1 - grade_noise)
+        max_grade = (
+            deposit["max_concentration_percent"]
+            * (1 - horizontal_distance)
+            * grade_factor
+        )
         threshold = deposit["display_threshold_percent"]
         if max_grade < threshold:
             continue
@@ -477,7 +708,7 @@ def generate_map(config: dict[str, Any], seed: int | None = None) -> dict[str, A
                 config["rocks"], layers, boundaries, x_index, y_index, effective_seed
             )
             mineralization = _deposits_for_cell(
-                map_config, deposits, x_index, y_index
+                map_config, deposits, x_index, y_index, effective_seed
             )
             for interval in intervals:
                 rock_interval_counts[interval["rock_id"]] += 1
@@ -497,7 +728,7 @@ def generate_map(config: dict[str, Any], seed: int | None = None) -> dict[str, A
 
     total_depth = map_config["depth_cells"] * map_config["depth_step_m"]
     return {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "map_kind": "synthetic_ground_truth",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "seed": effective_seed,

@@ -9,22 +9,43 @@
   "geology": {
     "layer_count": [5, 7],
     "surface_rock_id": "soil",
-    "subsurface_rock_ids": [
-      "stone",
-      "sandstone",
-      "red_sandstone",
-      "clay",
-      "limestone",
-      "granite",
-      "diorite",
-      "andesite",
-      "deepslate",
-      "tuff",
-      "calcite",
-      "dripstone",
-      "basalt",
-      "blackstone",
-      "obsidian"
+    "stratigraphic_groups": [
+      {
+        "id": "shallow_sedimentary",
+        "name": "Верхние осадочные породы",
+        "minimum_layers": 1,
+        "rock_ids": [
+          "sandstone",
+          "red_sandstone",
+          "clay",
+          "limestone",
+          "calcite",
+          "dripstone"
+        ]
+      },
+      {
+        "id": "middle_rock",
+        "name": "Средние скальные и вулканические породы",
+        "minimum_layers": 1,
+        "rock_ids": [
+          "stone",
+          "tuff",
+          "andesite",
+          "diorite",
+          "granite",
+          "basalt"
+        ]
+      },
+      {
+        "id": "deep_rock",
+        "name": "Глубинные породы",
+        "minimum_layers": 1,
+        "rock_ids": [
+          "deepslate",
+          "blackstone",
+          "obsidian"
+        ]
+      }
     ],
     "surface_thickness_m": [10, 30],
     "minimum_layer_thickness_m": 20,
@@ -33,6 +54,10 @@
     "wave_y": [0.06, 0.18]
   },
   "deposit_generation": {
-    "count": [2, 4]
+    "count": [2, 4],
+    "shape_irregularity": [0.18, 0.38],
+    "vertical_irregularity": [0.12, 0.32],
+    "noise_scale_cells": [2.5, 6.0],
+    "concentration_variation": [0.15, 0.35]
   }
 }
