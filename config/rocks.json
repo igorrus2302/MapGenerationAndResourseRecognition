@@ -143,6 +143,213 @@
       "color": "#292342",
       "density_g_cm3": [2.3, 2.6],
       "porosity_percent": [0.0, 1.0]
+    },
+    {
+      "id": "conglomerate",
+      "name": "Конгломерат",
+      "category": "sedimentary",
+      "minecraft_analogue": "—",
+      "color": "#9B8063",
+      "density_g_cm3": [2.2, 2.7],
+      "porosity_percent": [3.0, 20.0]
+    },
+    {
+      "id": "siltstone",
+      "name": "Алевролит",
+      "category": "sedimentary",
+      "minecraft_analogue": "—",
+      "color": "#9A8C7A",
+      "density_g_cm3": [2.3, 2.65],
+      "porosity_percent": [2.0, 15.0]
+    },
+    {
+      "id": "claystone",
+      "name": "Аргиллит",
+      "category": "sedimentary",
+      "minecraft_analogue": "—",
+      "color": "#756F68",
+      "density_g_cm3": [2.2, 2.6],
+      "porosity_percent": [3.0, 18.0]
+    },
+    {
+      "id": "shale",
+      "name": "Глинистый сланец",
+      "category": "sedimentary",
+      "minecraft_analogue": "—",
+      "color": "#596168",
+      "density_g_cm3": [2.3, 2.75],
+      "porosity_percent": [1.0, 12.0]
+    },
+    {
+      "id": "carbonaceous_shale",
+      "name": "Углистый сланец",
+      "category": "sedimentary",
+      "minecraft_analogue": "Coal Ore",
+      "color": "#34383A",
+      "density_g_cm3": [2.1, 2.6],
+      "porosity_percent": [2.0, 15.0]
+    },
+    {
+      "id": "dolomite",
+      "name": "Доломит",
+      "category": "carbonate",
+      "minecraft_analogue": "—",
+      "color": "#D6CFB7",
+      "density_g_cm3": [2.7, 2.9],
+      "porosity_percent": [1.0, 15.0]
+    },
+    {
+      "id": "chert",
+      "name": "Кремнистая порода",
+      "category": "sedimentary",
+      "minecraft_analogue": "—",
+      "color": "#B6A8A0",
+      "density_g_cm3": [2.55, 2.7],
+      "porosity_percent": [0.1, 3.0]
+    },
+    {
+      "id": "dacite",
+      "name": "Дацит",
+      "category": "volcanic",
+      "minecraft_analogue": "—",
+      "color": "#A99D96",
+      "density_g_cm3": [2.4, 2.75],
+      "porosity_percent": [0.2, 6.0]
+    },
+    {
+      "id": "rhyolite",
+      "name": "Риолит",
+      "category": "volcanic",
+      "minecraft_analogue": "—",
+      "color": "#C89A8A",
+      "density_g_cm3": [2.3, 2.7],
+      "porosity_percent": [0.2, 8.0]
+    },
+    {
+      "id": "granodiorite",
+      "name": "Гранодиорит",
+      "category": "igneous",
+      "minecraft_analogue": "—",
+      "color": "#B9B1A7",
+      "density_g_cm3": [2.65, 2.85],
+      "porosity_percent": [0.1, 3.0]
+    },
+    {
+      "id": "gabbro",
+      "name": "Габбро",
+      "category": "igneous",
+      "minecraft_analogue": "—",
+      "color": "#3E484A",
+      "density_g_cm3": [2.85, 3.15],
+      "porosity_percent": [0.1, 3.0]
+    },
+    {
+      "id": "peridotite",
+      "name": "Перидотит",
+      "category": "ultramafic",
+      "minecraft_analogue": "—",
+      "color": "#4F6652",
+      "density_g_cm3": [3.15, 3.4],
+      "porosity_percent": [0.1, 2.0]
+    },
+    {
+      "id": "slate",
+      "name": "Кристаллический сланец",
+      "category": "metamorphic",
+      "minecraft_analogue": "—",
+      "color": "#58606A",
+      "density_g_cm3": [2.7, 2.9],
+      "porosity_percent": [0.2, 3.0]
+    },
+    {
+      "id": "schist",
+      "name": "Слюдяной сланец",
+      "category": "metamorphic",
+      "minecraft_analogue": "—",
+      "color": "#756C62",
+      "density_g_cm3": [2.65, 3.0],
+      "porosity_percent": [0.2, 5.0]
+    },
+    {
+      "id": "gneiss",
+      "name": "Гнейс",
+      "category": "metamorphic",
+      "minecraft_analogue": "—",
+      "color": "#9A9186",
+      "density_g_cm3": [2.65, 3.0],
+      "porosity_percent": [0.1, 3.0]
+    },
+    {
+      "id": "quartzite",
+      "name": "Кварцит",
+      "category": "metamorphic",
+      "minecraft_analogue": "—",
+      "color": "#D4C8B5",
+      "density_g_cm3": [2.55, 2.75],
+      "porosity_percent": [0.1, 3.0]
+    },
+    {
+      "id": "marble",
+      "name": "Мрамор",
+      "category": "metamorphic",
+      "minecraft_analogue": "—",
+      "color": "#E7E1D7",
+      "density_g_cm3": [2.6, 2.9],
+      "porosity_percent": [0.2, 5.0]
+    },
+    {
+      "id": "amphibolite",
+      "name": "Амфиболит",
+      "category": "metamorphic",
+      "minecraft_analogue": "—",
+      "color": "#3F514A",
+      "density_g_cm3": [2.9, 3.2],
+      "porosity_percent": [0.1, 3.0]
+    },
+    {
+      "id": "serpentinite",
+      "name": "Серпентинит",
+      "category": "metamorphic",
+      "minecraft_analogue": "—",
+      "color": "#5D785E",
+      "density_g_cm3": [2.5, 2.7],
+      "porosity_percent": [0.5, 5.0]
+    },
+    {
+      "id": "ferruginous_quartzite",
+      "name": "Железистый кварцит",
+      "category": "metamorphic",
+      "minecraft_analogue": "Iron Ore",
+      "color": "#8B4A3A",
+      "density_g_cm3": [3.0, 3.8],
+      "porosity_percent": [0.1, 2.0]
+    },
+    {
+      "id": "kimberlite",
+      "name": "Кимберлит",
+      "category": "intrusive",
+      "minecraft_analogue": "—",
+      "color": "#596B57",
+      "density_g_cm3": [2.4, 2.9],
+      "porosity_percent": [1.0, 8.0]
+    },
+    {
+      "id": "pegmatite",
+      "name": "Пегматит",
+      "category": "intrusive",
+      "minecraft_analogue": "—",
+      "color": "#E7C7C9",
+      "density_g_cm3": [2.55, 2.75],
+      "porosity_percent": [0.1, 3.0]
+    },
+    {
+      "id": "carbonatite",
+      "name": "Карбонатит",
+      "category": "intrusive",
+      "minecraft_analogue": "—",
+      "color": "#D9D3B9",
+      "density_g_cm3": [2.7, 3.1],
+      "porosity_percent": [0.5, 6.0]
     }
   ]
 }

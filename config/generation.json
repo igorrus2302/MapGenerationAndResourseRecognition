@@ -7,43 +7,56 @@
     "depth_step_m": 10
   },
   "geology": {
-    "layer_count": [5, 7],
+    "layer_count": [6, 8],
     "surface_rock_id": "soil",
     "stratigraphic_groups": [
       {
-        "id": "shallow_sedimentary",
-        "name": "Верхние осадочные породы",
-        "minimum_layers": 1,
+        "id": "sedimentary_cover",
+        "name": "Осадочный чехол",
+        "minimum_layers": 2,
         "rock_ids": [
           "sandstone",
           "red_sandstone",
-          "clay",
+          "conglomerate",
+          "siltstone",
+          "claystone",
+          "shale",
+          "carbonaceous_shale",
           "limestone",
-          "calcite",
-          "dripstone"
+          "dolomite",
+          "chert"
         ]
       },
       {
-        "id": "middle_rock",
-        "name": "Средние скальные и вулканические породы",
-        "minimum_layers": 1,
+        "id": "magmatic_complex",
+        "name": "Магматический и вулканический комплекс",
+        "minimum_layers": 2,
         "rock_ids": [
-          "stone",
           "tuff",
           "andesite",
+          "dacite",
+          "rhyolite",
+          "basalt",
           "diorite",
+          "granodiorite",
           "granite",
-          "basalt"
+          "gabbro"
         ]
       },
       {
-        "id": "deep_rock",
-        "name": "Глубинные породы",
+        "id": "metamorphic_basement",
+        "name": "Метаморфический фундамент",
         "minimum_layers": 1,
         "rock_ids": [
-          "deepslate",
-          "blackstone",
-          "obsidian"
+          "slate",
+          "schist",
+          "gneiss",
+          "quartzite",
+          "marble",
+          "amphibolite",
+          "peridotite",
+          "serpentinite",
+          "ferruginous_quartzite"
         ]
       }
     ],
@@ -51,7 +64,13 @@
     "minimum_layer_thickness_m": 20,
     "boundary_variation_m": [5, 25],
     "wave_x": [0.06, 0.18],
-    "wave_y": [0.06, 0.18]
+    "wave_y": [0.06, 0.18],
+    "fault_generation": {
+      "count": [2, 4],
+      "dip_deg": [55, 88],
+      "displacement_m": [10, 35],
+      "influence_width_m": [20, 55]
+    }
   },
   "deposit_generation": {
     "count": [2, 4],

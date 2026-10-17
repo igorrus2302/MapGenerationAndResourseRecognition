@@ -14,7 +14,7 @@ from geo_map import build_viewer, generate_map, load_config, save_map
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Генерация минимальной синтетической геологической карты"
+        description="Генерация синтетической геологической карты"
     )
     parser.add_argument(
         "--config",

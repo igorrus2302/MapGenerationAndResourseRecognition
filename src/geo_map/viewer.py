@@ -271,10 +271,10 @@ HTML_TEMPLATE = r'''<!doctype html>
     function mineralizationAt(cell, depthM) {
       if (!cell) return null;
       const matches = cell.mineralization.filter(
-        item => depthM >= item.from_depth_m && depthM <= item.to_depth_m
+        item => depthM >= item.from_depth_m && depthM < item.to_depth_m
       );
       return matches.reduce(
-        (best, item) => !best || item.maximum_concentration_percent > best.maximum_concentration_percent
+        (best, item) => !best || depositStrength(item) > depositStrength(best)
           ? item : best,
         null
       );
@@ -286,13 +286,23 @@ HTML_TEMPLATE = r'''<!doctype html>
 
     function depositStrength(item) {
       const deposit = depositFor(item);
-      return deposit ? Math.min(1, item.maximum_concentration_percent / deposit.max_concentration_percent) : 0;
+      return deposit ? Math.min(1, item.maximum_grade / deposit.max_grade) : 0;
     }
 
-    function formatConcentration(value) {
+    function formatGrade(value) {
       if (value < 0.01) return value.toFixed(4);
       if (value < 1) return value.toFixed(3);
       return value.toFixed(2);
+    }
+
+    function controlName(control) {
+      return ({
+        host: 'порода-хозяин',
+        stratiform: 'пластовый',
+        contact: 'контакт пород',
+        fault: 'разлом',
+        intrusive: 'интрузивное тело'
+      })[control] || control;
     }
 
     function hexToRgb(hex) {
@@ -478,37 +488,35 @@ HTML_TEMPLATE = r'''<!doctype html>
         const depositShapes = [];
         for (const cell of cells) {
           if (!cell.mineralization.length) continue;
-          const item = cell.mineralization.reduce(
-            (best, current) => current.maximum_concentration_percent > best.maximum_concentration_percent
-              ? current : best
-          );
-          const deposit = depositFor(item);
-          const x = cell.x_index;
-          const y = cell.y_index;
-          const z1 = item.from_depth_m / dims.depth_step_m;
-          const z2 = item.to_depth_m / dims.depth_step_m;
-          const xFace = projection.sin >= 0 ? x + 1 : x;
-          const yFace = projection.cos >= 0 ? y + 1 : y;
-          const alpha = 0.30 + 0.34 * depositStrength(item);
-          const fill = rgba(deposit.color, alpha, 1.08);
-          const top = [
-            projection.point(x, y, z1), projection.point(x + 1, y, z1),
-            projection.point(x + 1, y + 1, z1), projection.point(x, y + 1, z1)
-          ];
-          const sideX = [
-            projection.point(xFace, y, z1), projection.point(xFace, y + 1, z1),
-            projection.point(xFace, y + 1, z2), projection.point(xFace, y, z2)
-          ];
-          const sideY = [
-            projection.point(x, yFace, z1), projection.point(x + 1, yFace, z1),
-            projection.point(x + 1, yFace, z2), projection.point(x, yFace, z2)
-          ];
-          for (const points of [top, sideX, sideY]) {
-            depositShapes.push({
-              points,
-              depth: points.reduce((sum, point) => sum + point.depth, 0) / points.length,
-              fill
-            });
+          for (const item of cell.mineralization) {
+            const deposit = depositFor(item);
+            const x = cell.x_index;
+            const y = cell.y_index;
+            const z1 = item.from_depth_m / dims.depth_step_m;
+            const z2 = item.to_depth_m / dims.depth_step_m;
+            const xFace = projection.sin >= 0 ? x + 1 : x;
+            const yFace = projection.cos >= 0 ? y + 1 : y;
+            const alpha = 0.30 + 0.34 * depositStrength(item);
+            const fill = rgba(deposit.color, alpha, 1.08);
+            const top = [
+              projection.point(x, y, z1), projection.point(x + 1, y, z1),
+              projection.point(x + 1, y + 1, z1), projection.point(x, y + 1, z1)
+            ];
+            const sideX = [
+              projection.point(xFace, y, z1), projection.point(xFace, y + 1, z1),
+              projection.point(xFace, y + 1, z2), projection.point(xFace, y, z2)
+            ];
+            const sideY = [
+              projection.point(x, yFace, z1), projection.point(x + 1, yFace, z1),
+              projection.point(x + 1, yFace, z2), projection.point(x, yFace, z2)
+            ];
+            for (const points of [top, sideX, sideY]) {
+              depositShapes.push({
+                points,
+                depth: points.reduce((sum, point) => sum + point.depth, 0) / points.length,
+                fill
+              });
+            }
           }
         }
         depositShapes.sort((a, b) => a.depth - b.depth);
@@ -575,24 +583,29 @@ HTML_TEMPLATE = r'''<!doctype html>
       );
       const geometry = gridGeometry(columns, dims.depth_m);
       const sourceWidth = geometry.cellSize * dims.cell_size_m;
-      const sourceHeight = geometry.cellSize * dims.depth_step_m;
       for (let horizontal = 0; horizontal < sourceColumns; horizontal++) {
         const x = axis === 'x' ? sliceIndex : horizontal;
         const y = axis === 'x' ? horizontal : sliceIndex;
         const cell = cellAt(x, y);
-        for (let z = 0; z < dims.depth_cells; z++) {
-          const depthM = (z + 0.5) * dims.depth_step_m;
-          const interval = intervalAt(cell, depthM);
+        const sx = geometry.left + horizontal * dims.cell_size_m * geometry.cellSize;
+        for (const interval of cell.intervals) {
           const rock = rockById[interval.rock_id];
-          const sx = geometry.left + horizontal * dims.cell_size_m * geometry.cellSize;
-          const sy = geometry.top + z * dims.depth_step_m * geometry.cellSize;
+          const sy = geometry.top + interval.from_depth_m * geometry.cellSize;
+          const intervalHeight = (
+            interval.to_depth_m - interval.from_depth_m
+          ) * geometry.cellSize;
           ctx.fillStyle = state.visibleRocks.has(rock.id) ? rock.color : '#e5eaf0';
-          ctx.fillRect(sx, sy, sourceWidth + .3, sourceHeight + .3);
-          const mineral = state.showDeposit ? mineralizationAt(cell, depthM) : null;
-          if (mineral) {
+          ctx.fillRect(sx, sy, sourceWidth + .3, intervalHeight + .3);
+        }
+        if (state.showDeposit) {
+          for (const mineral of cell.mineralization) {
+            const sy = geometry.top + mineral.from_depth_m * geometry.cellSize;
+            const mineralHeight = (
+              mineral.to_depth_m - mineral.from_depth_m
+            ) * geometry.cellSize;
             const alpha = 0.25 + 0.65 * depositStrength(mineral);
             ctx.fillStyle = rgba(depositFor(mineral).color, alpha);
-            ctx.fillRect(sx, sy, sourceWidth + .3, sourceHeight + .3);
+            ctx.fillRect(sx, sy, sourceWidth + .3, Math.max(.3, mineralHeight));
           }
         }
       }
@@ -700,11 +713,13 @@ HTML_TEMPLATE = r'''<!doctype html>
       const mineral = mineralizationAt(cell, depthM);
       const deposit = depositFor(mineral);
       const title = mineral ? deposit.name : rock.name;
+      const hostRock = mineral ? (rockById[mineral.host_rock_id] || rock) : rock;
       const mineralRows = mineral
         ? `
           <span>Ископаемое</span><b>${mineral.mineral}</b>
-          <span>Концентрация</span><b>${formatConcentration(mineral.average_concentration_percent)} %</b>
-          <span>Порода-носитель</span><b>${rock.name}</b>`
+          <span>Содержание</span><b>${formatGrade(mineral.average_grade)} ${mineral.grade_unit}</b>
+          <span>Порода-носитель</span><b>${hostRock.name}</b>
+          <span>Геологический контроль</span><b>${controlName(mineral.geological_control)}</b>`
         : `
           <span>Ископаемое</span><b>нет</b>
           <span>Порода</span><b>${rock.name}</b>`;
