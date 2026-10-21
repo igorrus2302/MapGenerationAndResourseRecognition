@@ -1,0 +1,54 @@
+{
+  "type": "FeatureCollection",
+  "name": "surface_geochemistry",
+  "schema_version": "1.0",
+  "coordinate_system": "local_cartesian",
+  "coordinate_unit": "m",
+  "vertical_reference": "depth_positive_down_from_surface",
+  "map_extent_m": {
+    "x": [
+      0.0,
+      400.0
+    ],
+    "y": [
+      0.0,
+      400.0
+    ]
+  },
+  "description": "Точечные результаты поверхностного геохимического опробования. Координаты геометрии записаны как [x_m, y_m] в локальной системе синтетической карты.",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "EXAMPLE-SG-001-Au",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.0,
+          210.0
+        ]
+      },
+      "properties": {
+        "campaign_id": "EXAMPLE-CAMPAIGN",
+        "sample_id": "EXAMPLE-SG-001",
+        "sample_date": "2026-01-14",
+        "sample_material": "soil",
+        "sampling_depth_from_m": 0.2,
+        "sampling_depth_to_m": 0.4,
+        "sampling_method": "grid_soil_sample",
+        "analyte": "Au",
+        "result_value": 0.018,
+        "result_qualifier": null,
+        "unit": "g/t Au",
+        "detection_limit": 0.005,
+        "analysis_method": "fire_assay",
+        "laboratory": "EXAMPLE-LAB",
+        "certificate_id": "EXAMPLE-CERT-SG-001",
+        "position_uncertainty_m": 2.0,
+        "qc_type": "primary",
+        "parent_sample_id": null,
+        "qc_flag": "pass",
+        "notes": "Демонстрационная запись; удалить или заменить перед загрузкой данных"
+      }
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+campaign_id,hole_id,x_m,y_m,collar_elevation_m,total_depth_m,azimuth_deg,dip_deg,coordinate_system,position_uncertainty_m,drilling_method,start_date,end_date,hole_status
+EXAMPLE-CAMPAIGN,EXAMPLE-BH-001,120.0,210.0,0.0,250.0,0.0,-90.0,local_cartesian,1.5,diamond,2026-01-15,2026-01-20,completed

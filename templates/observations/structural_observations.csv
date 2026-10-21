@@ -1,0 +1,2 @@
+campaign_id,observation_id,hole_id,x_m,y_m,depth_m,feature_type,strike_deg,dip_deg,dip_direction_deg,offset_estimate_m,confidence,observation_method,notes
+EXAMPLE-CAMPAIGN,EXAMPLE-STR-001,EXAMPLE-BH-001,,,145.0,fault,35.0,70.0,125.0,4.0,medium,core_logging,Раздробленная зона и зеркала скольжения
