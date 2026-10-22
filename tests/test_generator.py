@@ -248,7 +248,20 @@ class GeneratorTests(unittest.TestCase):
             )
 
     def test_intrusive_model_replaces_country_rock(self) -> None:
-        generated = generate_map(self.config, seed=0)
+        config = deepcopy(self.config)
+        lithium = next(item for item in config["minerals"] if item["id"] == "lithium")
+        config["minerals"] = [lithium]
+        config["deposit_generation"]["count"] = [1, 1]
+        config["geology"]["layer_count"] = [2, 2]
+        config["geology"]["stratigraphic_groups"] = [
+            {
+                "id": "granite_host",
+                "name": "Гранитная вмещающая порода",
+                "minimum_layers": 1,
+                "rock_ids": ["granite"],
+            }
+        ]
+        generated = generate_map(config, seed=0)
         intrusive = [
             deposit
             for deposit in generated["deposits"]

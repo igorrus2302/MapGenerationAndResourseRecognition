@@ -1,8 +1,8 @@
 {
   "map": {
-    "width_cells": 40,
-    "height_cells": 40,
-    "depth_cells": 30,
+    "width_cells": 100,
+    "height_cells": 100,
+    "depth_cells": 50,
     "cell_size_m": 10,
     "depth_step_m": 10
   },

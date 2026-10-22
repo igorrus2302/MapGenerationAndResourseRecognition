@@ -1,0 +1,90 @@
+{
+  "campaign_id": "EXP-001",
+  "title": "Первая разведочная экспедиция",
+  "date": "2026-10-22",
+  "ideal": false,
+  "drilling": {
+    "layout": "grid",
+    "hole_count": 25,
+    "depth_m": 300,
+    "sample_length_m": 5
+  },
+  "noise": {
+    "position_sigma_m": 1.5,
+    "boundary_sigma_m": 1.0,
+    "density_sigma_g_cm3": 0.02,
+    "porosity_sigma_percent": 0.3,
+    "assay_relative_sigma": 0.05,
+    "assay_detection_limit_sigma_fraction": 0.15,
+    "missing_sample_probability": 0.02,
+    "lithology_error_probability": 0.03
+  },
+  "structures": {
+    "enabled": true,
+    "observe_contacts": true,
+    "observe_faults": true,
+    "method": "oriented_core",
+    "fault_detection_probability": 0.85,
+    "depth_sigma_m": 1.0,
+    "orientation_sigma_deg": 3.0
+  },
+  "surface_geochemistry": {
+    "enabled": true,
+    "layout": "grid",
+    "point_count": 100,
+    "sample_material": "soil",
+    "sampling_depth_from_m": 0.2,
+    "sampling_depth_to_m": 0.4,
+    "position_sigma_m": 2.0,
+    "analytes": [
+      {"analyte": "Cu", "unit": "% Cu", "detection_limit": 0.0005, "background_grade": 0.002, "response_factor": 0.05, "depth_decay_m": 60, "lateral_spread_m": 35, "background_scale_m": 100, "background_variation_fraction": 0.3},
+      {"analyte": "Fe", "unit": "% Fe", "detection_limit": 0.01, "background_grade": 1.0, "response_factor": 0.05, "depth_decay_m": 40, "lateral_spread_m": 35, "background_scale_m": 100, "background_variation_fraction": 0.2},
+      {"analyte": "Au", "unit": "g/t Au", "detection_limit": 0.001, "background_grade": 0.002, "response_factor": 0.02, "depth_decay_m": 50, "lateral_spread_m": 40, "background_scale_m": 100, "background_variation_fraction": 0.4}
+    ]
+  },
+  "trenches": {
+    "enabled": true,
+    "layout": "grid",
+    "trench_count": 3,
+    "length_m": 300,
+    "azimuth_deg": 90,
+    "depth_m": 2,
+    "width_m": 1,
+    "sample_length_m": 5,
+    "sampling_height_m": 0.2,
+    "position_sigma_m": 1.5
+  },
+  "quality_control": {
+    "enabled": true,
+    "duplicate_every": 20,
+    "blank_every": 20,
+    "standard_every": 20,
+    "duplicate_preparation_sigma": 0.03,
+    "duplicate_tolerance_percent": 20,
+    "standard_tolerance_percent": 10,
+    "blank_detection_limit_multiple": 3,
+    "standard_detection_limit_multiple": 100,
+    "standard_uncertainty_fraction": 0.01,
+    "batch_bias_fraction": 0,
+    "contamination_detection_limits": 0
+  },
+  "analytes": [
+    {"analyte": "Cu", "unit": "% Cu", "detection_limit": 0.01},
+    {"analyte": "Fe", "unit": "% Fe", "detection_limit": 0.1},
+    {"analyte": "Au", "unit": "g/t Au", "detection_limit": 0.01},
+    {"analyte": "Coal", "unit": "% coal", "detection_limit": 0.1},
+    {"analyte": "Diamond", "unit": "ct/t", "detection_limit": 0.01},
+    {"analyte": "Emerald", "unit": "ct/t", "detection_limit": 0.01},
+    {"analyte": "Al₂O₃", "unit": "% Al₂O₃", "detection_limit": 0.1},
+    {"analyte": "U₃O₈", "unit": "% U₃O₈", "detection_limit": 0.001},
+    {"analyte": "Pb+Zn", "unit": "% Pb+Zn", "detection_limit": 0.01},
+    {"analyte": "Ni+Cu", "unit": "% Ni+Cu", "detection_limit": 0.01},
+    {"analyte": "Cr₂O₃", "unit": "% Cr₂O₃", "detection_limit": 0.1},
+    {"analyte": "Sn+W", "unit": "% Sn+W", "detection_limit": 0.01},
+    {"analyte": "Li₂O", "unit": "% Li₂O", "detection_limit": 0.01},
+    {"analyte": "Cu+Zn", "unit": "% Cu+Zn", "detection_limit": 0.01},
+    {"analyte": "P₂O₅", "unit": "% P₂O₅", "detection_limit": 0.1},
+    {"analyte": "Mn", "unit": "% Mn", "detection_limit": 0.1},
+    {"analyte": "TREO", "unit": "% TREO", "detection_limit": 0.01}
+  ]
+}

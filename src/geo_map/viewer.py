@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
+from .expedition_view import EXPEDITION_PANEL, WORKSPACE_SCRIPT, WORKSPACE_STYLES, WORKSPACE_TABS
 
 HTML_TEMPLATE = r'''<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Просмотр геологической карты</title>
+  <title>Геологическая разведка — карта и экспедиция</title>
   <style>
     :root {
       --navy: #102a43;
@@ -130,6 +132,7 @@ HTML_TEMPLATE = r'''<!doctype html>
       aside { border-right: 0; border-bottom: 1px solid var(--line); }
       main { height: 70vh; }
     }
+    __WORKSPACE_STYLES__
   </style>
 </head>
 <body>
@@ -137,14 +140,15 @@ HTML_TEMPLATE = r'''<!doctype html>
     <div class="brand">
       <div class="brand-mark">3D</div>
       <div>
-        <h1>Геологическая карта</h1>
-        <p>Минимальный генератор истинной модели</p>
+        <h1>Геологическая разведка</h1>
+        <p>Истинная модель · наблюдения · восстановление</p>
       </div>
     </div>
     <div class="header-stats" id="headerStats"></div>
   </header>
 
-  <div class="layout">
+  __WORKSPACE_TABS__
+  <div class="layout" id="truthPanel" role="tabpanel" aria-labelledby="tab-truth">
     <aside>
       <div class="control-group">
         <h2>Режим просмотра</h2>
@@ -210,8 +214,10 @@ HTML_TEMPLATE = r'''<!doctype html>
     </main>
   </div>
 
+  __EXPEDITION_PANEL__
   <script>
     const MAP_DATA = __MAP_DATA__;
+    const OBSERVATION_DATA = __OBSERVATION_DATA__;
 
     const canvas = document.getElementById('mapCanvas');
     const ctx = canvas.getContext('2d');
@@ -323,6 +329,7 @@ HTML_TEMPLATE = r'''<!doctype html>
     function resizeCanvas() {
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       const rect = shell.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
       canvas.width = Math.max(1, Math.round(rect.width * ratio));
       canvas.height = Math.max(1, Math.round(rect.height * ratio));
       canvas.style.width = `${rect.width}px`;
@@ -356,6 +363,7 @@ HTML_TEMPLATE = r'''<!doctype html>
     }
 
     function render() {
+      if (document.getElementById('truthPanel').classList.contains('hidden')) return;
       clearCanvas();
       if (state.mode === '3d') render3D();
       else if (state.mode === 'horizontal') renderHorizontal();
@@ -852,17 +860,28 @@ HTML_TEMPLATE = r'''<!doctype html>
     buildLegend();
     new ResizeObserver(resizeCanvas).observe(shell);
     updateControls();
+    __WORKSPACE_SCRIPT__
   </script>
 </body>
 </html>
 '''
 
 
-def build_viewer(data: dict[str, Any], path: str | Path) -> Path:
-    """Create a standalone offline HTML viewer with the map embedded in it."""
+def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[str, Any] | None = None) -> Path:
+    """Create an offline workspace with truth, expedition and recognition tabs."""
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     embedded = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
-    html = HTML_TEMPLATE.replace("__MAP_DATA__", embedded)
+    public_observations = json.dumps(observations, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
+    replacements = {
+        "__WORKSPACE_STYLES__": WORKSPACE_STYLES,
+        "__WORKSPACE_TABS__": WORKSPACE_TABS,
+        "__EXPEDITION_PANEL__": EXPEDITION_PANEL,
+        "__WORKSPACE_SCRIPT__": WORKSPACE_SCRIPT,
+    }
+    html = re.sub("|".join(replacements), lambda match: replacements[match.group()], HTML_TEMPLATE)
+    # Insert each JSON literal once; strings inside the payload are never templates.
+    data_replacements = {"__OBSERVATION_DATA__": public_observations, "__MAP_DATA__": embedded}
+    html = re.sub("|".join(data_replacements), lambda match: data_replacements[match.group()], html)
     output_path.write_text(html, encoding="utf-8")
     return output_path

@@ -1,0 +1,104 @@
+"""Sampling and measurement primitives shared by observation models."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import random
+from typing import Any
+
+
+def measure_grade(value: float, analyte: dict[str, Any], noise: dict[str, Any], seed: int,
+                  sample_id: str, *, ideal: bool = False, bias_fraction: float = 0,
+                  contamination_limits: float = 0) -> dict[str, Any]:
+    """One laboratory model for primary samples and all control materials."""
+    rng = _rng(seed, "assay", sample_id, analyte["analyte"])
+    relative = 0 if ideal else noise.get("assay_relative_sigma", 0)
+    if not ideal:
+        value = value * (1 + bias_fraction) + contamination_limits * analyte["detection_limit"]
+    value *= math.exp(rng.gauss(-relative * relative / 2, relative))
+    limit = analyte["detection_limit"]
+    additive = 0 if ideal else limit * noise.get("assay_detection_limit_sigma_fraction", 0)
+    value = max(0.0, value + rng.gauss(0, additive))
+    if analyte["unit"].startswith("%"):
+        value = min(100.0, value)
+    below = not ideal and value < limit
+    return {"result_value": limit if below else round(value, 8),
+            "result_qualifier": "lt" if below else None,
+            "unit": analyte["unit"], "detection_limit": limit}
+
+
+def _rng(seed: int, *parts: object) -> random.Random:
+    key = json.dumps([seed, *parts], ensure_ascii=False, separators=(",", ":"))
+    return random.Random(int.from_bytes(hashlib.sha256(key.encode()).digest(), "big"))
+
+
+def _number(value: Any, name: str, *, positive: bool = False) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name}: требуется число")
+    number = float(value)
+    if not math.isfinite(number) or number < 0 or (positive and number == 0):
+        raise ValueError(f"{name}: требуется конечное {'положительное' if positive else 'неотрицательное'} число")
+    return number
+
+
+class TruthSampler:
+    """Internal sampler. None of its source records are exported as observations."""
+
+    def __init__(self, truth_map: dict[str, Any]):
+        self.dimensions = truth_map["dimensions"]
+        self.cells = {(cell["x_index"], cell["y_index"]): cell for cell in truth_map["cells"]}
+
+    def column(self, x_m: float, y_m: float) -> dict[str, Any]:
+        dims = self.dimensions
+        if not (math.isfinite(x_m) and math.isfinite(y_m) and 0 <= x_m < dims["width_m"] and 0 <= y_m < dims["height_m"]):
+            raise ValueError("Точка наблюдения находится вне карты")
+        step = dims["cell_size_m"]
+        return self.cells[math.floor(x_m / step), math.floor(y_m / step)]
+
+    def segments(self, x_m: float, y_m: float, from_m: float, to_m: float) -> list[dict[str, Any]]:
+        if not 0 <= from_m < to_m <= self.dimensions["depth_m"]:
+            raise ValueError("Недопустимый интервал опробования")
+        cell = self.column(x_m, y_m)
+        cuts = {from_m, to_m}
+        for interval in [*cell["intervals"], *cell["mineralization"]]:
+            for key in ("from_depth_m", "to_depth_m"):
+                if from_m < interval[key] < to_m:
+                    cuts.add(interval[key])
+        result = []
+        edges = sorted(cuts)
+        for start, end in zip(edges, edges[1:]):
+            middle = (start + end) / 2
+            rock = next((item for item in cell["intervals"] if item["from_depth_m"] <= middle < item["to_depth_m"]), None)
+            if rock is None:
+                raise ValueError("Истинная карта содержит разрыв в интервалах пород")
+            result.append({
+                "length_m": end - start,
+                "properties": rock["properties"],
+                "mineralization": [item for item in cell["mineralization"] if item["from_depth_m"] <= middle < item["to_depth_m"]],
+            })
+        return result
+
+    def sample(self, x_m: float, y_m: float, from_m: float, to_m: float, analytes: list[dict[str, Any]]) -> dict[str, Any]:
+        segments = self.segments(x_m, y_m, from_m, to_m)
+        total_mass = sum(part["length_m"] * part["properties"]["density_g_cm3"] for part in segments)
+        if total_mass <= 0:
+            raise ValueError("Для опробования нужна положительная плотность")
+        grades = {}
+        for analyte in analytes:
+            mass_grade = 0.0
+            for part in segments:
+                matches = [item for item in part["mineralization"] if item["mineral"] == analyte["analyte"]]
+                if any(item["grade_unit"] != analyte["unit"] for item in matches):
+                    raise ValueError(f"Несовместимые единицы для {analyte['analyte']}")
+                grade = sum(item["average_grade"] for item in matches)
+                mass_grade += grade * part["length_m"] * part["properties"]["density_g_cm3"]
+            grades[analyte["analyte"]] = mass_grade / total_mass
+        return {
+            "grades": grades,
+            "density_g_cm3": total_mass / (to_m - from_m),
+            "porosity_percent": sum(part["length_m"] * part["properties"]["porosity_percent"] for part in segments) / (to_m - from_m),
+        }
+
+
