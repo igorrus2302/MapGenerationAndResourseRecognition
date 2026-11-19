@@ -222,9 +222,17 @@ class ExtendedObservationTests(unittest.TestCase):
             self.assertEqual(feature["geometry"]["coordinates"], [row["x_m"], row["y_m"]])
             self.assertEqual(feature["properties"]["result_value"], row["result_value"])
         with tempfile.TemporaryDirectory() as directory:
-            save_observations(bundle, directory)
-            self.assertEqual(json.loads((Path(directory) / "surface_geochemistry.geojson").read_text()), bundle["geojson"]["surface_geochemistry"])
-            self.assertEqual(len(list(Path(directory).glob("*.csv"))), 11)
+            root = Path(directory)
+            legacy = root / "surface_geochemistry.geojson"
+            legacy.write_text(json.dumps(bundle["geojson"]["surface_geochemistry"]))
+            save_observations(bundle, root)
+            self.assertFalse(legacy.exists())
+            for name, folder in (("surface_geochemistry", "surface_geochemistry"), ("trench_paths", "trenches")):
+                path = root / "tables" / folder / f"{name}.geojson"
+                self.assertEqual(json.loads(path.read_text()), bundle["geojson"][name])
+            self.assertTrue((root / "tables/quality_control/quality_control.csv").is_file())
+            self.assertTrue((root / "tables/trenches/trench_samples.csv").is_file())
+            self.assertTrue((root / "tables/surface_geochemistry/surface_geochemistry.csv").is_file())
 
     def test_invalid_additional_plans_are_rejected(self):
         changes = [

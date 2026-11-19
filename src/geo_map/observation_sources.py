@@ -16,12 +16,15 @@ BOREHOLE_SOURCE_KINDS = {
 }
 
 
+def borehole_source_kind(collar: dict[str, Any]) -> str:
+    return "vertical_boreholes" if collar["dip_deg"] == -90 else "inclined_boreholes"
+
+
 def describe_borehole_sources(bundle: dict[str, Any]) -> list[dict[str, Any]]:
     """Describe disjoint sources without duplicating their records in the bundle."""
     sources = []
     for kind, title in BOREHOLE_SOURCE_KINDS.items():
-        holes = [row for row in bundle["tables"]["borehole_collars"]
-                 if (row["dip_deg"] == -90) == (kind == "vertical_boreholes")]
+        holes = [row for row in bundle["tables"]["borehole_collars"] if borehole_source_kind(row) == kind]
         ids = {row["hole_id"] for row in holes}
         tables = {name: [row for row in bundle["tables"].get(name, []) if row["hole_id"] in ids]
                   for name in BOREHOLE_SOURCE_TABLES}

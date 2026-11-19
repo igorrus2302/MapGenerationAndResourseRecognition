@@ -189,8 +189,10 @@ class ObservationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = save_observations(bundle, directory)
             self.assertEqual(json.loads(path.read_text()), bundle)
+            tables_dir = Path(directory) / "tables"
             for name, rows in bundle["tables"].items():
-                with (Path(directory) / f"{name}.csv").open(encoding="utf-8", newline="") as stream:
+                csv_file, = tables_dir.glob(f"*/{name}.csv")
+                with csv_file.open(encoding="utf-8", newline="") as stream:
                     reader = csv.DictReader(stream)
                     exported = list(reader)
                     self.assertEqual(reader.fieldnames, TABLE_FIELDS[name])
@@ -198,7 +200,7 @@ class ObservationTests(unittest.TestCase):
                 template = ROOT / "templates/observations" / f"{name}.csv"
                 if template.exists():
                     self.assertEqual(template.read_text().splitlines()[0].split(","), TABLE_FIELDS[name])
-            with (Path(directory) / "structural_observations.csv").open(encoding="utf-8") as stream:
+            with (tables_dir / "boreholes/structural_observations.csv").open(encoding="utf-8") as stream:
                 self.assertEqual(next(csv.DictReader(stream))["strike_deg"], "")
 
     def test_viewer_has_three_tabs_and_safe_embedded_observations(self) -> None:

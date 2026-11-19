@@ -14,7 +14,8 @@ from typing import Any
 from .boreholes import collar_bounds, orientation, validate_trajectory
 from .observation_tools import TruthSampler, _number, _rng, measure_grade
 from .observation_models import EXTRA_TABLE_FIELDS, extend_campaign, validate_extensions
-from .observation_sources import describe_borehole_sources, make_borehole_source
+from .observation_objects import save_observation_objects
+from .observation_sources import BOREHOLE_SOURCE_TABLES, describe_borehole_sources, make_borehole_source
 
 
 TABLE_FIELDS = {
@@ -25,6 +26,13 @@ TABLE_FIELDS = {
     "structural_observations": "campaign_id observation_id hole_id x_m y_m depth_m feature_type strike_deg dip_deg dip_direction_deg offset_estimate_m confidence observation_method notes".split(),
 }
 TABLE_FIELDS.update(EXTRA_TABLE_FIELDS)
+
+SUMMARY_FOLDERS = {
+    **dict.fromkeys(BOREHOLE_SOURCE_TABLES, "boreholes"),
+    **dict.fromkeys(("trenches", "trench_intervals", "trench_samples", "trench_paths"), "trenches"),
+    "surface_geochemistry": "surface_geochemistry",
+    "quality_control": "quality_control",
+}
 
 
 def load_observation_config(path: str | Path) -> dict[str, Any]:
@@ -256,24 +264,32 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
     return bundle
 
 
-def _save_bundle(bundle: dict[str, Any], directory: str | Path) -> Path:
+def _save_bundle(bundle: dict[str, Any], directory: str | Path, *, group_tables: bool = False) -> Path:
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
+
+    def export_path(name: str, extension: str) -> Path:
+        folder = directory
+        if group_tables:
+            folder = directory / "tables" / SUMMARY_FOLDERS[name]
+            folder.mkdir(parents=True, exist_ok=True)
+        return folder / f"{name}.{extension}"
+
     output = directory / "observations.json"
     output.write_text(json.dumps(bundle, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
     for name, fields in bundle["table_fields"].items():
-        with (directory / f"{name}.csv").open("w", encoding="utf-8", newline="") as stream:
+        with export_path(name, "csv").open("w", encoding="utf-8", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=fields)
             writer.writeheader()
             writer.writerows(bundle["tables"][name])
     for name, data in bundle.get("geojson", {}).items():
-        (directory / f"{name}.geojson").write_text(json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
+        export_path(name, "geojson").write_text(json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
     return output
 
 
 def save_observations(bundle: dict[str, Any], directory: str | Path) -> Path:
-    """Export the combined workspace plus two independently usable drilling sources."""
-    output = _save_bundle(bundle, directory)
+    """Export the campaign, drilling sources and individual observation objects."""
+    output = _save_bundle(bundle, directory, group_tables=True)
     sources = describe_borehole_sources(bundle)
     (Path(directory) / "borehole_sources.json").write_text(
         json.dumps({"schema_version": bundle["schema_version"], "data_kind": "borehole_source_manifest",
@@ -281,4 +297,11 @@ def save_observations(bundle: dict[str, Any], directory: str | Path) -> Path:
                    ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
     for source in sources:
         _save_bundle(make_borehole_source(bundle, source["kind"]), Path(directory) / source["directory"])
+    save_observation_objects(bundle, output.parent)
+    # Clear generated files left at the root by earlier versions after their replacements exist.
+    for names, extension in ((bundle["table_fields"], "csv"), (bundle.get("geojson", {}), "geojson")):
+        for name in names:
+            old_file = output.parent / f"{name}.{extension}"
+            if old_file.is_file():
+                old_file.unlink()
     return output

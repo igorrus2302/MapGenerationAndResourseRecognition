@@ -116,6 +116,7 @@ def main() -> None:
     print(f"Наблюдений зон разломов: {observations['summary']['fault_observation_count']}")
     print(f"Контрольных проб: {observations['summary']['qc_sample_count']}")
     print(f"Наблюдения: {observation_path}")
+    print(f"Файлы отдельных объектов: {observation_path.parent / 'objects' / 'index.json'}")
     print(f"Просмотр: {viewer_path}")
 
 
