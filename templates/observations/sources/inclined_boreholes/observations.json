@@ -1,0 +1,276 @@
+{
+  "schema_version": "1.3",
+  "data_kind": "borehole_observation_source",
+  "source": {
+    "source_id": "EXAMPLE-CAMPAIGN:inclined_boreholes",
+    "kind": "inclined_boreholes",
+    "title": "Наклонное бурение",
+    "directory": "sources/inclined_boreholes",
+    "hole_ids": [
+      "EXAMPLE-I-BH-001"
+    ],
+    "table_names": [
+      "borehole_collars",
+      "borehole_lithology",
+      "borehole_assays",
+      "downhole_properties",
+      "structural_observations",
+      "fault_intersections"
+    ],
+    "summary": {
+      "hole_count": 1,
+      "drilled_m": 250.0,
+      "sample_count": 1,
+      "assay_count": 1,
+      "lithology_count": 2,
+      "property_count": 1,
+      "contact_count": 1,
+      "fault_observation_count": 0
+    }
+  },
+  "campaign": {
+    "campaign_id": "EXAMPLE-CAMPAIGN",
+    "title": "Демонстрационный шаблон источника",
+    "date": "2026-01-20",
+    "coordinate_system": "local_cartesian",
+    "width_m": 1000,
+    "height_m": 1000
+  },
+  "plan": {
+    "layout": "manual",
+    "sample_length_m": 10,
+    "borehole_path": "straight",
+    "borehole_depth_reference": "measured_depth_m",
+    "ideal": false,
+    "analytes": [
+      {
+        "analyte": "Au",
+        "unit": "g/t Au",
+        "detection_limit": 0.01
+      }
+    ]
+  },
+  "summary": {
+    "hole_count": 1,
+    "drilled_m": 250.0,
+    "sample_count": 1,
+    "assay_count": 1,
+    "lithology_count": 2,
+    "property_count": 1,
+    "contact_count": 1,
+    "fault_observation_count": 0
+  },
+  "notes": [
+    "Демонстрационные записи EXAMPLE-* нужно заменить собственными наблюдениями.",
+    "Интервалы и глубины скважин отсчитываются вдоль ствола от устья.",
+    "Общелабораторные контрольные пробы хранятся в отдельной таблице quality_control.csv полной кампании."
+  ],
+  "rock_catalog": [
+    {
+      "id": "soil",
+      "name": "Почва",
+      "color": "#826748"
+    },
+    {
+      "id": "sandstone",
+      "name": "Песчаник",
+      "color": "#d8b46a"
+    }
+  ],
+  "table_fields": {
+    "borehole_collars": [
+      "campaign_id",
+      "hole_id",
+      "x_m",
+      "y_m",
+      "collar_elevation_m",
+      "total_depth_m",
+      "azimuth_deg",
+      "dip_deg",
+      "coordinate_system",
+      "position_uncertainty_m",
+      "drilling_method",
+      "start_date",
+      "end_date",
+      "hole_status"
+    ],
+    "borehole_lithology": [
+      "campaign_id",
+      "hole_id",
+      "interval_id",
+      "from_m",
+      "to_m",
+      "observed_rock_id",
+      "observed_rock_name",
+      "description",
+      "weathering",
+      "alteration",
+      "confidence",
+      "observer",
+      "logged_date"
+    ],
+    "borehole_assays": [
+      "campaign_id",
+      "sample_id",
+      "hole_id",
+      "from_m",
+      "to_m",
+      "analyte",
+      "result_value",
+      "result_qualifier",
+      "unit",
+      "detection_limit",
+      "analysis_method",
+      "laboratory",
+      "certificate_id",
+      "qc_type",
+      "qc_flag"
+    ],
+    "downhole_properties": [
+      "campaign_id",
+      "hole_id",
+      "measurement_id",
+      "from_m",
+      "to_m",
+      "depth_m",
+      "density_g_cm3",
+      "porosity_percent",
+      "measurement_method",
+      "density_error_g_cm3",
+      "porosity_error_percent",
+      "qc_flag"
+    ],
+    "structural_observations": [
+      "campaign_id",
+      "observation_id",
+      "hole_id",
+      "x_m",
+      "y_m",
+      "depth_m",
+      "feature_type",
+      "strike_deg",
+      "dip_deg",
+      "dip_direction_deg",
+      "offset_estimate_m",
+      "confidence",
+      "observation_method",
+      "notes"
+    ],
+    "fault_intersections": [
+      "campaign_id",
+      "observation_id",
+      "hole_id",
+      "from_m",
+      "to_m",
+      "observation_method",
+      "confidence",
+      "description"
+    ]
+  },
+  "tables": {
+    "borehole_collars": [
+      {
+        "campaign_id": "EXAMPLE-CAMPAIGN",
+        "hole_id": "EXAMPLE-I-BH-001",
+        "x_m": 300,
+        "y_m": 200,
+        "collar_elevation_m": 0.0,
+        "total_depth_m": 250.0,
+        "azimuth_deg": 90,
+        "dip_deg": -60,
+        "coordinate_system": "local_cartesian",
+        "position_uncertainty_m": 1.5,
+        "drilling_method": "diamond",
+        "start_date": "2026-01-15",
+        "end_date": "2026-01-20",
+        "hole_status": "completed"
+      }
+    ],
+    "borehole_lithology": [
+      {
+        "campaign_id": "EXAMPLE-CAMPAIGN",
+        "hole_id": "EXAMPLE-I-BH-001",
+        "interval_id": "EXAMPLE-I-LITH-001",
+        "from_m": 0.0,
+        "to_m": 20.0,
+        "observed_rock_id": "soil",
+        "observed_rock_name": "Почва",
+        "description": "Рыхлый поверхностный материал",
+        "weathering": "moderate",
+        "alteration": null,
+        "confidence": "high",
+        "observer": "geologist_01",
+        "logged_date": "2026-01-20"
+      },
+      {
+        "campaign_id": "EXAMPLE-CAMPAIGN",
+        "hole_id": "EXAMPLE-I-BH-001",
+        "interval_id": "EXAMPLE-I-LITH-002",
+        "from_m": 20,
+        "to_m": 250,
+        "observed_rock_id": "sandstone",
+        "observed_rock_name": "Песчаник",
+        "description": "Пример описания керна: песчаник",
+        "weathering": "moderate",
+        "alteration": null,
+        "confidence": "high",
+        "observer": "geologist_01",
+        "logged_date": "2026-01-20"
+      }
+    ],
+    "borehole_assays": [
+      {
+        "campaign_id": "EXAMPLE-CAMPAIGN",
+        "sample_id": "EXAMPLE-I-SMP-001",
+        "hole_id": "EXAMPLE-I-BH-001",
+        "from_m": 80.0,
+        "to_m": 90.0,
+        "analyte": "Au",
+        "result_value": 0.18,
+        "result_qualifier": null,
+        "unit": "g/t Au",
+        "detection_limit": 0.01,
+        "analysis_method": "fire_assay",
+        "laboratory": "EXAMPLE-LAB",
+        "certificate_id": "EXAMPLE-CERT-001",
+        "qc_type": "primary",
+        "qc_flag": "not_checked"
+      }
+    ],
+    "downhole_properties": [
+      {
+        "campaign_id": "EXAMPLE-CAMPAIGN",
+        "hole_id": "EXAMPLE-I-BH-001",
+        "measurement_id": "EXAMPLE-I-PROP-001",
+        "from_m": 80.0,
+        "to_m": 90.0,
+        "depth_m": null,
+        "density_g_cm3": 2.68,
+        "porosity_percent": 1.2,
+        "measurement_method": "gravimetric",
+        "density_error_g_cm3": 0.02,
+        "porosity_error_percent": 0.3,
+        "qc_flag": "not_checked"
+      }
+    ],
+    "structural_observations": [
+      {
+        "campaign_id": "EXAMPLE-CAMPAIGN",
+        "observation_id": "EXAMPLE-I-CONTACT-001",
+        "hole_id": "EXAMPLE-I-BH-001",
+        "x_m": null,
+        "y_m": null,
+        "depth_m": 20,
+        "feature_type": "contact",
+        "strike_deg": null,
+        "dip_deg": null,
+        "dip_direction_deg": null,
+        "offset_estimate_m": null,
+        "confidence": "high",
+        "observation_method": "core_logging",
+        "notes": "Пример контакта в керне; расстояние измерено вдоль ствола"
+      }
+    ],
+    "fault_intersections": []
+  }
+}

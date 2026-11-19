@@ -7,7 +7,12 @@
     "layout": "grid",
     "hole_count": 25,
     "depth_m": 300,
-    "sample_length_m": 5
+    "sample_length_m": 5,
+    "orientations": [
+      {"azimuth_deg": 0, "dip_deg": -90},
+      {"azimuth_deg": 90, "dip_deg": -60},
+      {"azimuth_deg": 270, "dip_deg": -60}
+    ]
   },
   "noise": {
     "position_sigma_m": 1.5,

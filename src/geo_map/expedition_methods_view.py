@@ -67,7 +67,8 @@ METHODS_SCRIPT = r'''
           element(section.panel).classList.toggle('hidden', name !== key);
           sectionButtons[name].setAttribute('aria-pressed', String(name === key));
         }
-        for (const id of ['observationHoleFilter', 'observationTrenchFilter', 'observationAnalyteFilter', 'observationSampleFilter', 'observationQcFilter']) element(id).value = '';
+        for (const id of ['observationSourceFilter', 'observationHoleFilter', 'observationTrenchFilter', 'observationAnalyteFilter', 'observationSampleFilter', 'observationQcFilter']) element(id).value = '';
+        updateSourceHoles();
         page = 0; buildTableTabs(sections[key].tables);
         element('dataSectionTitle').textContent = sections[key].label;
         element('downloadMethodGeoJson').classList.toggle('hidden', !sections[key].geojson);

@@ -7,7 +7,8 @@ import json
 import math
 from typing import Any, Callable
 
-from .generator import _fault_zone_depth_range
+from .boreholes import direction as borehole_direction
+from .generator import _fault_signed_distance_m
 from .observation_tools import TruthSampler, _number, _rng, measure_grade
 
 
@@ -381,13 +382,25 @@ def _fault_observations(truth: dict[str, Any], config: dict[str, Any], seed: int
     for hole in holes:
         number = 0
         for fault_index, fault in enumerate(truth.get("faults", [])):
-            zone = _fault_zone_depth_range(fault, hole["x_m"], hole["y_m"], 0, hole["depth_m"])
-            if zone is None:
-                continue
+            distance = _fault_signed_distance_m(fault, hole["x_m"], hole["y_m"])
+            dx, dy, dz = borehole_direction(hole)
+            strike, dip = math.radians(fault["strike_deg"]), math.radians(fault["dip_deg"])
+            slope = -dx * math.sin(strike) + dy * math.cos(strike)
+            if not math.isclose(dip, math.pi / 2):
+                slope -= dz / math.tan(dip)
+            width = fault["influence_width_m"]
+            if abs(slope) < 1e-12:
+                if abs(distance) > width:
+                    continue
+                top, bottom = 0.0, hole["depth_m"]
+            else:
+                entering, leaving = sorted(((-width - distance) / slope, (width - distance) / slope))
+                top, bottom = max(0.0, entering), min(hole["depth_m"], leaving)
+                if top >= bottom:
+                    continue
             rng = _rng(seed, "fault-observation", hole["hole_id"], fault_index)
             if not ideal and rng.random() >= settings.get("fault_detection_probability", 1):
                 continue
-            top, bottom = zone
             shift = 0 if ideal else rng.gauss(0, settings.get("depth_sigma_m", 0))
             shift = max(-top, min(hole["depth_m"] - bottom, shift))
             top, bottom = round(top + shift, 6), min(hole["depth_m"], round(bottom + shift, 6))

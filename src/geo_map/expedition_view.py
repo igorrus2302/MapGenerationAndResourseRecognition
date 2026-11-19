@@ -30,6 +30,7 @@ WORKSPACE_STYLES = r'''
     .profile-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
     .profile-heading select { width: auto; max-width: 180px; }
     .hole-profile { height: 280px; width: 100%; display: block; }
+    .hole-trajectory { height: 190px; width: 100%; display: block; margin-top: 16px; }
     .profile-key { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 8px; }
     .profile-key span { display: inline-flex; align-items: center; gap: 5px; }
     .profile-key i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
@@ -103,13 +104,16 @@ EXPEDITION_PANEL = r'''
           <div class="profile-heading"><div><h3 id="holeProfileTitle"></h3><div id="holeProfileCaption" class="muted"></div></div><select id="profileAnalyte" aria-label="Компонент на графике содержания"></select></div>
           <svg id="holeProfile" class="hole-profile" viewBox="0 0 700 300" role="img" aria-label="Литологический журнал и анализы выбранной скважины"></svg>
           <div class="profile-key" id="profileKey"></div>
+          <svg id="holeTrajectory" class="hole-trajectory" viewBox="0 0 700 200" role="img" aria-label="Траектория выбранной скважины в вертикальной плоскости"></svg>
+          <div class="muted" id="holeTrajectoryCaption"></div>
         </div>
       </div>
       __METHOD_OVERVIEWS__
       <div class="panel-card">
-        <div class="data-heading"><div><h3 id="dataSectionTitle">Данные экспедиции</h3><div class="muted">Наблюдения и измерения выбранного раздела</div></div><div class="data-downloads"><button id="downloadMethodGeoJson" class="hidden">Скачать GeoJSON</button><button id="downloadObservationCsv">CSV всей таблицы</button></div></div>
+        <div class="data-heading"><div><h3 id="dataSectionTitle">Данные экспедиции</h3><div class="muted">Наблюдения и измерения выбранного раздела</div></div><div class="data-downloads"><button id="downloadMethodGeoJson" class="hidden">Скачать GeoJSON</button><button id="downloadDrillingSource" class="hidden">Скачать источник · JSON</button><button id="downloadObservationCsv">CSV всей таблицы</button></div></div>
         <div class="data-tabs" id="observationTabs"></div>
         <div class="data-filters">
+          <label id="sourceFilterLabel">Источник бурения<select id="observationSourceFilter"></select></label>
           <label id="holeFilterLabel">Скважина<select id="observationHoleFilter"></select></label>
           <label id="trenchFilterLabel" class="hidden">Траншея<select id="observationTrenchFilter"></select></label>
           <label id="analyteFilterLabel">Компонент<select id="observationAnalyteFilter"></select></label>
@@ -175,19 +179,21 @@ WORKSPACE_SCRIPT = r'''
       const tableNames = {borehole_collars: 'Скважины', borehole_lithology: 'Литология', borehole_assays: 'Анализы проб', downhole_properties: 'Физические свойства', structural_observations: 'Контакты и разломы', fault_intersections: 'Интервалы нарушений', surface_geochemistry: 'Почвенные пробы', trenches: 'Положение траншей', trench_intervals: 'Описание дна', trench_samples: 'Канавные пробы', quality_control: 'Контрольные пробы'};
       const fieldNames = {
         campaign_id: 'Экспедиция', hole_id: 'Скважина', x_m: 'X, м', y_m: 'Y, м', collar_elevation_m: 'Отметка устья, м',
-        total_depth_m: 'Глубина, м', azimuth_deg: 'Азимут, °', dip_deg: 'Падение, °', coordinate_system: 'Система координат',
+        total_depth_m: 'Длина ствола, м', azimuth_deg: 'Азимут, °', dip_deg: 'Угол от горизонтали, °', coordinate_system: 'Система координат',
         position_uncertainty_m: 'Погрешность положения, м', drilling_method: 'Способ бурения', start_date: 'Начало', end_date: 'Окончание', hole_status: 'Состояние',
         interval_id: 'Интервал', from_m: 'От, м', to_m: 'До, м', observed_rock_id: 'Код породы', observed_rock_name: 'Порода', description: 'Описание',
         weathering: 'Выветрелость', alteration: 'Изменения', confidence: 'Уверенность', observer: 'Наблюдатель', logged_date: 'Дата описания',
         sample_id: 'Проба', analyte: 'Компонент', result_value: 'Результат', result_qualifier: 'Квалификатор', unit: 'Единица', detection_limit: 'Предел обнаружения',
         analysis_method: 'Метод анализа', laboratory: 'Лаборатория', certificate_id: 'Сертификат', qc_type: 'Тип пробы', qc_flag: 'Контроль качества',
-        measurement_id: 'Измерение', depth_m: 'Глубина, м', density_g_cm3: 'Плотность, г/см³', porosity_percent: 'Пористость, %', measurement_method: 'Метод измерения',
+        measurement_id: 'Измерение', depth_m: 'Вдоль ствола, м', density_g_cm3: 'Плотность, г/см³', porosity_percent: 'Пористость, %', measurement_method: 'Метод измерения',
         density_error_g_cm3: 'Погрешность плотности', porosity_error_percent: 'Погрешность пористости', observation_id: 'Наблюдение', feature_type: 'Тип структуры',
         strike_deg: 'Простирание, °', dip_direction_deg: 'Направление падения, °', offset_estimate_m: 'Оценка смещения, м', observation_method: 'Метод наблюдения', notes: 'Примечания'
       };
       const categoryNames = {completed: 'Завершена', medium: 'Средняя', high: 'Высокая', low: 'Низкая', contact: 'Контакт', primary: 'Первичная', not_checked: 'Не проверено', core_logging: 'Описание керна', synthetic_core: 'Синтетическое бурение', synthetic_core_measurement: 'Синтетическое измерение', synthetic_assay: 'Синтетический анализ', local_cartesian: 'Локальная, м', lt: 'Ниже предела'};
       const tables = observations.tables;
       const holes = tables.borehole_collars;
+      const drillingSources = observations.borehole_sources || [];
+      const sourceByKind = new Map(drillingSources.map(source => [source.kind, source]));
       const rocks = Object.fromEntries(observations.rock_catalog.map(rock => [rock.id, rock]));
       let selectedHole = holes[0]?.hole_id;
       let activeTable = 'borehole_collars';
@@ -199,6 +205,7 @@ WORKSPACE_SCRIPT = r'''
       element('expeditionMetrics').innerHTML = [[summary.hole_count, 'скважин'], [`${number(summary.drilled_m)} м`, 'пройдено бурением'], [number(summary.total_sample_count ?? summary.sample_count), 'полевых проб всех методов'], [number(summary.total_assay_count ?? summary.assay_count), 'результатов полевых проб']].map(([value, label]) => `<div class="metric-card"><strong>${escape(value)}</strong><span>${label}</span></div>`).join('');
       const options = holes.map(hole => `<option value="${escape(hole.hole_id)}">${escape(hole.hole_id)}</option>`).join('');
       element('observationHoleFilter').innerHTML = '<option value="">Все скважины</option>' + options;
+      element('observationSourceFilter').innerHTML = '<option value="">Все источники бурения</option>' + drillingSources.map(source => `<option value="${escape(source.kind)}">${escape(source.title)} · ${source.summary.hole_count} скв.</option>`).join('');
       const analyteOptions = observations.plan.analytes.map(item => `<option value="${escape(item.analyte)}">${escape(item.analyte)} · ${escape(item.unit)}</option>`).join('');
       element('profileAnalyte').innerHTML = analyteOptions;
       const filterAnalytes = [...new Map([...observations.plan.analytes, ...(observations.plan.methods?.surface_geochemistry?.analytes || [])].map(item => [item.analyte, item])).values()];
@@ -216,8 +223,35 @@ WORKSPACE_SCRIPT = r'''
       element('downloadObservationCsv').addEventListener('click', () => {
         const fields = observations.table_fields[activeTable];
         const quote = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
-        const rows = [fields, ...tables[activeTable].map(row => fields.map(field => row[field]))];
-        download(rows.map(row => row.map(quote).join(',')).join('\r\n') + '\r\n', `${activeTable}.csv`, 'text/csv;charset=utf-8');
+        const source = sourceByKind.get(element('observationSourceFilter').value);
+        const rows = [fields, ...sourceRows(activeTable).map(row => fields.map(field => row[field]))];
+        download(rows.map(row => row.map(quote).join(',')).join('\r\n') + '\r\n', `${source ? source.kind + '_' : ''}${activeTable}.csv`, 'text/csv;charset=utf-8');
+      });
+      function sourceRows(name) {
+        const source = sourceByKind.get(element('observationSourceFilter').value);
+        if (!source || !observations.table_fields[name]?.includes('hole_id')) return tables[name] || [];
+        const ids = new Set(source.hole_ids);
+        return (tables[name] || []).filter(row => ids.has(row.hole_id));
+      }
+      function updateSourceHoles() {
+        const available = sourceRows('borehole_collars');
+        element('observationHoleFilter').innerHTML = '<option value="">Все скважины источника</option>' + available.map(hole => `<option value="${escape(hole.hole_id)}">${escape(hole.hole_id)}</option>`).join('');
+        if (!available.some(hole => hole.hole_id === selectedHole)) selectedHole = available[0]?.hole_id;
+        drawSurvey(); drawProfile();
+      }
+      element('observationSourceFilter').addEventListener('change', () => {
+        page = 0; updateSourceHoles(); renderTable();
+      });
+      element('downloadDrillingSource').addEventListener('click', () => {
+        const source = sourceByKind.get(element('observationSourceFilter').value);
+        if (!source) return;
+        const sourceTables = Object.fromEntries(source.table_names.map(name => [name, sourceRows(name)]));
+        const rockIds = new Set(sourceTables.borehole_lithology.map(row => row.observed_rock_id));
+        const bundle = {schema_version: observations.schema_version, data_kind: 'borehole_observation_source',
+          source, campaign: observations.campaign, plan: observations.plan, summary: source.summary, notes: observations.notes,
+          rock_catalog: observations.rock_catalog.filter(rock => rockIds.has(rock.id)),
+          table_fields: Object.fromEntries(source.table_names.map(name => [name, observations.table_fields[name]])), tables: sourceTables};
+        download(JSON.stringify(bundle, null, 2), `${source.kind}.json`, 'application/json');
       });
 
       function drawSurvey() {
@@ -230,13 +264,30 @@ WORKSPACE_SCRIPT = r'''
           markup += `<path d="M ${left + w * index / 5} ${top} v ${h} M ${left} ${top + h * index / 5} h ${w}" stroke="#dce7ed" stroke-dasharray="3 4"/>`;
         }
         markup += `<text x="${left}" y="${top + h + 19}" font-size="11" fill="#627d98">0</text><text x="${left + w}" y="${top + h + 19}" text-anchor="end" font-size="11" fill="#627d98">X · ${number(width)} м</text><text x="${left}" y="${top - 6}" font-size="10" fill="#627d98">Y · ${number(height)} м</text>`;
-        for (const hole of holes) {
+        for (const hole of sourceRows('borehole_collars')) {
           const cx = left + hole.x_m * scale, cy = top + h - hole.y_m * scale;
+          const end = holePosition(hole, hole.total_depth_m);
+          const ex = left + end.x * scale, ey = top + h - end.y * scale;
           const selected = hole.hole_id === selectedHole;
-          markup += `<circle class="hole-dot" role="button" tabindex="0" aria-label="${escape(hole.hole_id)}" aria-pressed="${selected}" data-hole="${escape(hole.hole_id)}" cx="${cx}" cy="${cy}" r="${selected ? 7 : 5}" fill="${selected ? '#e95e2a' : '#1677a8'}" stroke="white" stroke-width="2"><title>${escape(hole.hole_id)} · ${number(hole.total_depth_m)} м</title></circle>`;
+          const color = selected ? '#e95e2a' : '#1677a8';
+          if (hole.dip_deg !== -90) markup += `<line class="hole-dot" data-hole="${escape(hole.hole_id)}" data-hole-trajectory="${escape(hole.hole_id)}" x1="${cx}" y1="${cy}" x2="${ex}" y2="${ey}" stroke="${color}" stroke-width="${selected ? 4 : 2}" opacity="${selected ? 1 : .55}"><title>${escape(hole.hole_id)} · проекция ствола</title></line><circle cx="${ex}" cy="${ey}" r="3" fill="${color}"/>`;
+          markup += `<circle class="hole-dot" role="button" tabindex="0" aria-label="${escape(hole.hole_id)}" aria-pressed="${selected}" data-hole="${escape(hole.hole_id)}" cx="${cx}" cy="${cy}" r="${selected ? 7 : 5}" fill="${color}" stroke="white" stroke-width="2"><title>${escape(hole.hole_id)} · ствол ${number(hole.total_depth_m)} м · угол ${number(hole.dip_deg)}° · азимут ${number(hole.azimuth_deg)}°</title></circle>`;
         }
         element('surveyMap').innerHTML = markup;
-        element('surveyCaption').textContent = `Участок ${number(width)} × ${number(height)} м · показаны измеренные положения устьев`;
+        element('surveyCaption').textContent = `Участок ${number(width)} × ${number(height)} м · крупные точки — устья, линии — проекции наклонных стволов, малые точки — забои`;
+      }
+      function holePosition(hole, distance) {
+        const azimuth = (hole.azimuth_deg ?? 0) * Math.PI / 180;
+        const dip = (hole.dip_deg ?? -90) * Math.PI / 180;
+        const horizontal = hole.dip_deg === -90 ? 0 : distance * Math.cos(dip);
+        return {x: hole.x_m + horizontal * Math.sin(azimuth), y: hole.y_m + horizontal * Math.cos(azimuth), depth: -distance * Math.sin(dip), horizontal};
+      }
+      function drawTrajectory(hole) {
+        const end = holePosition(hole, hole.total_depth_m);
+        const scale = Math.min(480 / Math.max(1, end.horizontal), 135 / Math.max(1, end.depth));
+        const x = 110 + end.horizontal * scale, y = 24 + end.depth * scale;
+        element('holeTrajectory').innerHTML = `<text x="18" y="14" font-size="12" fill="#486581">Вертикальная глубина</text><path d="M 110 24 V 164 H 630" fill="none" stroke="#b7ccd8"/><path d="M 110 24 V ${y} H ${x}" fill="none" stroke="#b7ccd8" stroke-dasharray="4 4"/><path data-borehole-path="${escape(hole.hole_id)}" d="M 110 24 L ${x} ${y}" fill="none" stroke="#e95e2a" stroke-width="4"/><circle cx="110" cy="24" r="4" fill="#1677a8"/><circle cx="${x}" cy="${y}" r="4" fill="#e95e2a"/><text x="98" y="${y + 4}" text-anchor="end" font-size="11" fill="#486581">${number(end.depth)} м</text><text x="${x}" y="181" text-anchor="middle" font-size="11" fill="#486581">${number(end.horizontal)} м</text><text x="630" y="197" text-anchor="end" font-size="11" fill="#627d98">Горизонтальное отклонение от устья</text>`;
+        element('holeTrajectoryCaption').textContent = `Забой: X ${number(end.x)} · Y ${number(end.y)} м · вертикальная глубина ${number(end.depth)} м. Траектория рассчитана по измеренному устью и заданному направлению.`;
       }
       function selectHole(holeId) {
         selectedHole = holeId;
@@ -248,7 +299,12 @@ WORKSPACE_SCRIPT = r'''
 
       function drawProfile() {
         const hole = holes.find(item => item.hole_id === selectedHole);
-        if (!hole) return;
+        if (!hole) {
+          element('holeProfileTitle').textContent = 'В этом источнике нет скважин';
+          for (const id of ['holeProfileCaption', 'holeTrajectoryCaption']) element(id).textContent = '';
+          for (const id of ['holeProfile', 'holeTrajectory', 'profileKey']) element(id).innerHTML = '';
+          return;
+        }
         const analyte = element('profileAnalyte').value;
         const logs = tables.borehole_lithology.filter(row => row.hole_id === selectedHole);
         const assays = tables.borehole_assays.filter(row => row.hole_id === selectedHole && row.analyte === analyte);
@@ -256,8 +312,8 @@ WORKSPACE_SCRIPT = r'''
         const axisLeft = 380, axisWidth = 250;
         const maximum = Math.max(...assays.map(row => row.result_value), observations.plan.analytes.find(item => item.analyte === analyte).detection_limit);
         element('holeProfileTitle').textContent = selectedHole;
-        element('holeProfileCaption').textContent = `X ${number(hole.x_m)} · Y ${number(hole.y_m)} м · глубина ${number(hole.total_depth_m)} м`;
-        let markup = '<text x="68" y="18" font-size="12" fill="#486581">Глубина</text><text x="162" y="18" font-size="12" fill="#486581">Описание керна</text><text x="380" y="18" font-size="12" fill="#486581">Содержание по пробам</text>';
+        element('holeProfileCaption').textContent = `Устье X ${number(hole.x_m)} · Y ${number(hole.y_m)} м · ствол ${number(hole.total_depth_m)} м · угол ${number(hole.dip_deg)}° · азимут ${number(hole.azimuth_deg)}°`;
+        let markup = '<text x="12" y="18" font-size="11" fill="#486581">Вдоль ствола</text><text x="162" y="18" font-size="12" fill="#486581">Описание керна</text><text x="380" y="18" font-size="12" fill="#486581">Содержание по пробам</text>';
         for (let index = 0; index <= 5; index++) {
           const y = 36 + index * 46;
           markup += `<path d="M 105 ${y} H 640" stroke="#e8edf2"/><text x="94" y="${y + 4}" text-anchor="end" font-size="11" fill="#627d98">${number(index * hole.total_depth_m / 5)} м</text>`;
@@ -276,6 +332,7 @@ WORKSPACE_SCRIPT = r'''
         markup += `<text x="${axisLeft}" y="286" font-size="10" fill="#627d98">0</text><text x="${axisLeft + axisWidth}" y="286" text-anchor="end" font-size="10" fill="#627d98">${number(maximum)} ${escape(observations.plan.analytes.find(item => item.analyte === analyte).unit)}</text>`;
         element('holeProfile').innerHTML = markup;
         element('profileKey').innerHTML = '<span><i style="background:#168c86"></i>Измеренный результат</span><span><i style="background:#b7c9d5"></i>Верхняя граница: ниже предела обнаружения</span><span>Пустой участок — проба пропущена</span>';
+        drawTrajectory(hole);
       }
       element('profileAnalyte').addEventListener('change', drawProfile);
 
@@ -298,7 +355,7 @@ WORKSPACE_SCRIPT = r'''
         const trenchFilter = element('observationTrenchFilter').value;
         const sampleFilter = element('observationSampleFilter').value.trim();
         const qcFilter = element('observationQcFilter').value;
-        const rows = (tables[activeTable] || []).filter(row =>
+        const rows = sourceRows(activeTable).filter(row =>
           (!fields.includes('hole_id') || !holeFilter || row.hole_id === holeFilter) &&
           (!fields.includes('trench_id') || !trenchFilter || row.trench_id === trenchFilter) &&
           (!fields.includes('analyte') || !analyteFilter || row.analyte === analyteFilter) &&
@@ -306,6 +363,10 @@ WORKSPACE_SCRIPT = r'''
           (activeTable !== 'quality_control' || !qcFilter || row.qc_flag === qcFilter));
         page = Math.max(0, Math.min(page, Math.ceil(rows.length / pageSize) - 1));
         element('holeFilterLabel').classList.toggle('hidden', !fields.includes('hole_id'));
+        element('sourceFilterLabel').classList.toggle('hidden', !fields.includes('hole_id') || !drillingSources.length);
+        const sourceSelected = sourceByKind.has(element('observationSourceFilter').value);
+        element('downloadDrillingSource').classList.toggle('hidden', !sourceSelected || !fields.includes('hole_id'));
+        element('downloadObservationCsv').textContent = sourceSelected ? 'CSV источника' : 'CSV всей таблицы';
         element('trenchFilterLabel').classList.toggle('hidden', !fields.includes('trench_id'));
         element('analyteFilterLabel').classList.toggle('hidden', !fields.includes('analyte'));
         element('sampleFilterLabel').classList.toggle('hidden', !fields.includes('sample_id'));

@@ -1,0 +1,2 @@
+campaign_id,hole_id,measurement_id,from_m,to_m,depth_m,density_g_cm3,porosity_percent,measurement_method,density_error_g_cm3,porosity_error_percent,qc_flag
+EXAMPLE-CAMPAIGN,EXAMPLE-V-BH-001,EXAMPLE-V-PROP-001,80.0,90.0,,2.68,1.2,gravimetric,0.02,0.3,not_checked

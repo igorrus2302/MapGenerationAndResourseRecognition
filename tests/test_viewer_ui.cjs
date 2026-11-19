@@ -98,6 +98,18 @@ if (!observations) {
 } else {
   assert.match(get('expeditionMetrics').innerHTML, new RegExp(String(observations.summary.hole_count)));
   assert.ok(!get('holeProfile').innerHTML.includes('NaN'));
+  assert.match(get('holeProfile').innerHTML, /Вдоль ствола/);
+  assert.ok(!get('holeTrajectory').innerHTML.includes('NaN'));
+  const inclined = observations.tables.borehole_collars.find(hole => hole.dip_deg !== -90);
+  if (inclined) {
+    get('observationHoleFilter').value = inclined.hole_id;
+    get('observationHoleFilter').fire('change');
+    assert.match(get('surveyMap').innerHTML, new RegExp(`data-hole-trajectory="${inclined.hole_id}"`));
+    assert.match(get('holeTrajectory').innerHTML, new RegExp(`data-borehole-path="${inclined.hole_id}"`));
+    assert.match(get('holeProfileCaption').textContent, /угол.*азимут/);
+    const depth = inclined.total_depth_m * Math.sin(-inclined.dip_deg * Math.PI / 180);
+    assert.ok(get('holeTrajectoryCaption').textContent.includes(depth.toLocaleString('ru-RU', {maximumFractionDigits: 8})));
+  }
   const lastHole = observations.tables.borehole_collars.at(-1).hole_id;
   get('observationHoleFilter').value = lastHole;
   get('observationHoleFilter').fire('change');
@@ -159,12 +171,56 @@ if (!observations) {
   get('observationQcFilter').fire('change');
   const failCount = (observations.tables.quality_control || []).filter(row => row.qc_flag === 'fail').length;
   assert.equal(get('observationCount').textContent, `${failCount.toLocaleString('ru-RU')} записей`);
-  Promise.all(blobs.map(blob => blob.text())).then(([json, csv, surfaceJson, trenchJson]) => {
+  const sourceDownloads = [];
+  for (const source of observations.borehole_sources || []) {
+    get('expeditionSections').children[0].click();
+    get('observationSourceFilter').value = source.kind;
+    get('observationSourceFilter').fire('change');
+    assert.equal(get('observationCount').textContent, `${source.summary.hole_count.toLocaleString('ru-RU')} записей`);
+    assert.equal(get('downloadDrillingSource').classList.contains('hidden'), false);
+    assert.equal(get('downloadObservationCsv').textContent, 'CSV источника');
+    const ids = new Set(source.hole_ids);
+    for (const hole of observations.tables.borehole_collars) {
+      if (!ids.has(hole.hole_id)) {
+        assert.ok(!get('observationHoleFilter').innerHTML.includes(`value="${hole.hole_id}"`));
+        assert.ok(!get('surveyMap').innerHTML.includes(`data-hole="${hole.hole_id}"`));
+      }
+    }
+    if (!source.hole_ids.length) assert.equal(get('holeProfileTitle').textContent, 'В этом источнике нет скважин');
+    const index = blobs.length;
+    get('downloadDrillingSource').click();
+    get('downloadObservationCsv').click();
+    sourceDownloads.push({source, index});
+    get('observationTabs').children[2].click();
+    assert.equal(get('observationCount').textContent, `${source.summary.assay_count.toLocaleString('ru-RU')} записей`);
+  }
+  get('expeditionSections').children[1].click();
+  assert.equal(get('observationSourceFilter').value, '');
+  assert.equal(get('sourceFilterLabel').classList.contains('hidden'), true);
+  assert.equal(get('downloadDrillingSource').classList.contains('hidden'), true);
+  assert.equal(get('downloadObservationCsv').textContent, 'CSV всей таблицы');
+  Promise.all(blobs.map(blob => blob.text())).then(values => {
+    const [json, csv, surfaceJson, trenchJson] = values;
     assert.equal(json, JSON.stringify(observations, null, 2));
     assert.equal(csv.split('\r\n').length, observations.tables.borehole_assays.length + 2);
     assert.match(csv, /^"campaign_id","sample_id","hole_id"/);
     assert.equal(JSON.parse(surfaceJson).features.length, observations.tables.surface_geochemistry.length);
     assert.equal(JSON.parse(trenchJson).features.length, observations.tables.trenches.length);
-    console.log('Five expedition sections, navigation, filters, profiles, QA/QC and JSON/CSV/GeoJSON downloads: OK');
+    for (const {source, index} of sourceDownloads) {
+      const pack = JSON.parse(values[index]);
+      assert.equal(pack.source.kind, source.kind);
+      assert.equal(pack.data_kind, 'borehole_observation_source');
+      for (const name of source.table_names) {
+        const ids = new Set(source.hole_ids);
+        const expected = observations.tables[name].filter(row => ids.has(row.hole_id));
+        assert.equal(JSON.stringify(pack.tables[name]), JSON.stringify(expected));
+      }
+      assert.equal(values[index + 1].split('\r\n').length, source.summary.hole_count + 2);
+      const path = require('node:path');
+      const folder = path.dirname(process.argv[2] || 'output/map/map_view.html');
+      const savedSource = path.join(folder, 'observations', source.directory, 'observations.json');
+      if (fs.existsSync(savedSource)) assert.deepEqual(pack, JSON.parse(fs.readFileSync(savedSource, 'utf8')));
+    }
+    console.log('Expedition sections, independent drilling sources, filters, profiles and JSON/CSV/GeoJSON downloads: OK');
   }).catch(error => { console.error(error); process.exitCode = 1; });
 }

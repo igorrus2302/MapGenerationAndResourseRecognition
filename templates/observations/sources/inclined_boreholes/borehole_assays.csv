@@ -1,0 +1,2 @@
+campaign_id,sample_id,hole_id,from_m,to_m,analyte,result_value,result_qualifier,unit,detection_limit,analysis_method,laboratory,certificate_id,qc_type,qc_flag
+EXAMPLE-CAMPAIGN,EXAMPLE-I-SMP-001,EXAMPLE-I-BH-001,80.0,90.0,Au,0.18,,g/t Au,0.01,fire_assay,EXAMPLE-LAB,EXAMPLE-CERT-001,primary,not_checked

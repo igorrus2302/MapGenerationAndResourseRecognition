@@ -1,0 +1,2 @@
+campaign_id,observation_id,hole_id,x_m,y_m,depth_m,feature_type,strike_deg,dip_deg,dip_direction_deg,offset_estimate_m,confidence,observation_method,notes
+EXAMPLE-CAMPAIGN,EXAMPLE-I-CONTACT-001,EXAMPLE-I-BH-001,,,20,contact,,,,,high,core_logging,Пример контакта в керне; расстояние измерено вдоль ствола

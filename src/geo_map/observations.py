@@ -1,4 +1,4 @@
-"""Vertical drilling campaigns sampled from the interval ground-truth model."""
+"""Vertical and inclined drilling campaigns sampled from the ground-truth model."""
 
 from __future__ import annotations
 
@@ -11,8 +11,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from .boreholes import collar_bounds, orientation, validate_trajectory
 from .observation_tools import TruthSampler, _number, _rng, measure_grade
 from .observation_models import EXTRA_TABLE_FIELDS, extend_campaign, validate_extensions
+from .observation_sources import describe_borehole_sources, make_borehole_source
 
 
 TABLE_FIELDS = {
@@ -39,8 +41,6 @@ def _validate_config(config: dict[str, Any], dimensions: dict[str, Any]) -> None
         raise ValueError("ideal должен быть логическим значением")
     drilling = config["drilling"]
     depth = _number(drilling["depth_m"], "drilling.depth_m", positive=True)
-    if depth > dimensions["depth_m"]:
-        raise ValueError("Глубина скважин превышает глубину истинной карты")
     sample_length = _number(drilling["sample_length_m"], "drilling.sample_length_m", positive=True)
     if sample_length < 0.000001:
         raise ValueError("Шаг опробования должен быть не меньше 0.000001 м")
@@ -60,17 +60,13 @@ def _validate_config(config: dict[str, Any], dimensions: dict[str, Any]) -> None
             for axis, limit in (("x_m", "width_m"), ("y_m", "height_m")):
                 if _number(hole[axis], axis) >= dimensions[limit]:
                     raise ValueError(f"{hole_id}: устье скважины выходит за границы карты")
-            hole_depth = _number(hole.get("depth_m", depth), "depth_m", positive=True)
-            if hole_depth > dimensions["depth_m"]:
-                raise ValueError(f"{hole_id}: глубина скважины выходит за границы карты")
-            if hole.get("dip_deg", -90) != -90:
-                raise ValueError("Первая версия поддерживает только вертикальные скважины")
-        planned_samples = sum(math.ceil(hole.get("depth_m", depth) / sample_length) for hole in holes)
+            _number(hole.get("depth_m", depth), "depth_m", positive=True)
     else:
         count = drilling["hole_count"]
         if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 10000:
             raise ValueError("drilling.hole_count: требуется целое число от 1 до 10000")
-        planned_samples = count * math.ceil(depth / sample_length)
+    holes = _plan_holes(dimensions, drilling, seed=0)
+    planned_samples = sum(math.ceil(hole["depth_m"] / sample_length) for hole in holes)
     noise = config.get("noise", {})
     for key in ("position_sigma_m", "boundary_sigma_m", "density_sigma_g_cm3", "porosity_sigma_percent", "assay_relative_sigma", "assay_detection_limit_sigma_fraction"):
         _number(noise.get(key, 0), f"noise.{key}")
@@ -91,8 +87,20 @@ def _validate_config(config: dict[str, Any], dimensions: dict[str, Any]) -> None
 
 
 def _plan_holes(dimensions: dict[str, Any], drilling: dict[str, Any], seed: int) -> list[dict[str, Any]]:
+    defaults = orientation(drilling)
     if drilling.get("layout", "grid") == "manual":
-        return [{"depth_m": drilling["depth_m"], **hole} for hole in drilling["holes"]]
+        holes = []
+        for settings in drilling["holes"]:
+            hole = {"depth_m": drilling["depth_m"], **settings,
+                    **orientation({**defaults, **settings})}
+            validate_trajectory(hole, dimensions)
+            holes.append(hole)
+        return holes
+    patterns = drilling.get("orientations", [defaults])
+    if not isinstance(patterns, list) or not patterns or any(not isinstance(item, dict) for item in patterns):
+        raise ValueError("drilling.orientations: нужен непустой список направлений")
+    angles = [orientation({**defaults, **item}) for item in patterns]
+    bounds = [collar_bounds(dimensions, drilling["depth_m"], item) for item in angles]
     count = drilling["hole_count"]
     width, height = dimensions["width_m"], dimensions["height_m"]
     columns = max(1, min(count, math.ceil(math.sqrt(count * width / height))))
@@ -100,12 +108,14 @@ def _plan_holes(dimensions: dict[str, Any], drilling: dict[str, Any], seed: int)
     holes = []
     for index in range(count):
         rng = _rng(seed, "plan", index)
+        (xmin, xmax), (ymin, ymax) = bounds[index % len(bounds)]
         if drilling.get("layout", "grid") == "random":
-            x, y = rng.uniform(0.05, 0.95) * width, rng.uniform(0.05, 0.95) * height
+            fx, fy = rng.uniform(0.05, 0.95), rng.uniform(0.05, 0.95)
         else:
-            x = ((index % columns) + 0.5) * width / columns
-            y = ((index // columns) + 0.5) * height / rows
-        holes.append({"hole_id": f"BH-{index + 1:03d}", "x_m": x, "y_m": y, "depth_m": drilling["depth_m"]})
+            fx = ((index % columns) + 0.5) / columns
+            fy = ((index // columns) + 0.5) / rows
+        holes.append({"hole_id": f"BH-{index + 1:03d}", "x_m": xmin + fx * (xmax - xmin),
+                      "y_m": ymin + fy * (ymax - ymin), "depth_m": drilling["depth_m"], **angles[index % len(angles)]})
     return holes
 
 
@@ -142,17 +152,22 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
         append("borehole_collars", hole_id=hole_id,
                x_m=round(x + rng.gauss(0, sigma("position_sigma_m")), 6),
                y_m=round(y + rng.gauss(0, sigma("position_sigma_m")), 6),
-               collar_elevation_m=0, total_depth_m=depth, azimuth_deg=0, dip_deg=-90,
+               collar_elevation_m=0, total_depth_m=depth, azimuth_deg=hole["azimuth_deg"], dip_deg=hole["dip_deg"],
                coordinate_system="local_cartesian", position_uncertainty_m=sigma("position_sigma_m"),
                drilling_method="synthetic_core", start_date=logged_date, end_date=logged_date, hole_status="completed")
-        lithology = [item for item in sampler.column(x, y)["intervals"] if item["from_depth_m"] < depth]
+        lithology = []
+        for part in sampler.borehole_segments(hole, 0, depth):
+            if lithology and lithology[-1]["rock_id"] == part["rock_id"]:
+                lithology[-1]["to_m"] = part["to_m"]
+            else:
+                lithology.append({"from_m": part["from_m"], "to_m": part["to_m"], "rock_id": part["rock_id"]})
         boundaries = [0.0]
         for index, interval in enumerate(lithology[:-1]):
-            boundary = interval["to_depth_m"]
-            next_end = min(depth, lithology[index + 1]["to_depth_m"])
-            limit = 0.49 * min(boundary - interval["from_depth_m"], next_end - boundary)
+            boundary = interval["to_m"]
+            next_end = lithology[index + 1]["to_m"]
+            limit = 0.49 * min(boundary - interval["from_m"], next_end - boundary)
             shift = _rng(seed, "boundary", hole_id, index).gauss(0, sigma("boundary_sigma_m"))
-            boundaries.append(round(boundary + max(-limit, min(limit, shift)), 6))
+            boundaries.append(boundary + max(-limit, min(limit, shift)))
         boundaries.append(depth)
         for index, interval in enumerate(lithology):
             rock = rocks[interval["rock_id"]]
@@ -184,7 +199,7 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
             if rng.random() < sigma("missing_sample_probability"):
                 continue
             sample_count += 1
-            sample = sampler.sample(x, y, start, end, config["analytes"])
+            sample = sampler.sample_borehole(hole, start, end, config["analytes"])
             source_samples[sample_id] = {"source": "borehole", "hole_id": hole_id,
                                          "grades": sample["grades"], "analytes": config["analytes"]}
             append("downhole_properties", hole_id=hole_id, measurement_id=f"{hole_id}-P{index + 1:04d}",
@@ -205,13 +220,16 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
 
     extra = extend_campaign(truth_map, config, seed, holes, source_samples, tables, append)
     observed_ids = {item["observed_rock_id"] for item in tables["borehole_lithology"] + tables["trench_intervals"]}
-    return {
-        "schema_version": "1.1", "data_kind": "exploration_observations",
+    bundle = {
+        "schema_version": "1.3", "data_kind": "exploration_observations",
         "campaign": {"campaign_id": campaign_id, "title": config["title"], "date": logged_date,
                      "coordinate_system": "local_cartesian", "width_m": dimensions["width_m"], "height_m": dimensions["height_m"]},
         "plan": {"layout": config["drilling"].get("layout", "grid"), "sample_length_m": step,
+                 "borehole_path": "straight", "borehole_depth_reference": "measured_depth_m",
                  "ideal": ideal, "analytes": [{key: item[key] for key in ("analyte", "unit", "detection_limit")} for item in config["analytes"]], "methods": extra["methods"]},
         "summary": {"hole_count": len(holes), "drilled_m": round(sum(hole["depth_m"] for hole in holes), 6),
+                    "vertical_hole_count": sum(hole["dip_deg"] == -90 for hole in holes),
+                    "inclined_hole_count": sum(hole["dip_deg"] != -90 for hole in holes),
                     "sample_count": sample_count, "missing_sample_count": planned_samples - sample_count,
                     "assay_count": len(tables["borehole_assays"]), "lithology_count": len(tables["borehole_lithology"]),
                     "property_count": len(tables["downhole_properties"]),
@@ -220,7 +238,8 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
                     **extra["summary"]},
         "rock_catalog": [{"id": rock["id"], "name": rock["name"], "color": rock["color"]} for rock in rocks.values() if rock["id"] in observed_ids],
         "notes": [
-            "Моделируются вертикальное бурение, описание керна, интервальные анализы, физические свойства и включённые дополнительные методы.",
+            "Моделируются прямолинейные вертикальные и наклонные скважины, описание керна, интервальные анализы, физические свойства и включённые дополнительные методы.",
+            "Скважинные total_depth_m, from_m, to_m и depth_m — расстояния вдоль ствола от устья. Азимут отсчитывается от +Y по часовой стрелке к +X; dip_deg — угол от горизонтали вниз, -90° означает вертикаль. Вертикальная глубина равна расстоянию вдоль ствола × sin(|dip_deg|).",
             "В скважинных и траншейных пробах содержание постоянно внутри сохранённого интервала минерализации; вне таких интервалов принято нулевым. Для почвенной геохимии используется отдельная условная модель фона и переноса.",
             "Шаг опробования не повышает пространственное разрешение исходной модели.",
             "Результат с квалификатором lt означает содержание ниже указанного предела обнаружения, а не измеренный ноль.",
@@ -233,19 +252,33 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
         "tables": tables,
         "geojson": extra["geojson"],
     }
+    bundle["borehole_sources"] = describe_borehole_sources(bundle)
+    return bundle
 
 
-def save_observations(bundle: dict[str, Any], directory: str | Path) -> Path:
-    """Export the public bundle and the same records in template-compatible CSVs."""
+def _save_bundle(bundle: dict[str, Any], directory: str | Path) -> Path:
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     output = directory / "observations.json"
     output.write_text(json.dumps(bundle, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
-    for name, fields in TABLE_FIELDS.items():
+    for name, fields in bundle["table_fields"].items():
         with (directory / f"{name}.csv").open("w", encoding="utf-8", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=fields)
             writer.writeheader()
             writer.writerows(bundle["tables"][name])
     for name, data in bundle.get("geojson", {}).items():
         (directory / f"{name}.geojson").write_text(json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
+    return output
+
+
+def save_observations(bundle: dict[str, Any], directory: str | Path) -> Path:
+    """Export the combined workspace plus two independently usable drilling sources."""
+    output = _save_bundle(bundle, directory)
+    sources = describe_borehole_sources(bundle)
+    (Path(directory) / "borehole_sources.json").write_text(
+        json.dumps({"schema_version": bundle["schema_version"], "data_kind": "borehole_source_manifest",
+                    "campaign": bundle["campaign"], "borehole_sources": sources},
+                   ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
+    for source in sources:
+        _save_bundle(make_borehole_source(bundle, source["kind"]), Path(directory) / source["directory"])
     return output

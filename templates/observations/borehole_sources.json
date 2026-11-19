@@ -1,0 +1,68 @@
+{
+  "schema_version": "1.3",
+  "data_kind": "borehole_source_manifest",
+  "campaign": {
+    "campaign_id": "EXAMPLE-CAMPAIGN",
+    "title": "Демонстрационный шаблон источника",
+    "date": "2026-01-20",
+    "coordinate_system": "local_cartesian",
+    "width_m": 1000,
+    "height_m": 1000
+  },
+  "borehole_sources": [
+    {
+      "source_id": "EXAMPLE-CAMPAIGN:vertical_boreholes",
+      "kind": "vertical_boreholes",
+      "title": "Вертикальное бурение",
+      "directory": "sources/vertical_boreholes",
+      "hole_ids": [
+        "EXAMPLE-V-BH-001"
+      ],
+      "table_names": [
+        "borehole_collars",
+        "borehole_lithology",
+        "borehole_assays",
+        "downhole_properties",
+        "structural_observations",
+        "fault_intersections"
+      ],
+      "summary": {
+        "hole_count": 1,
+        "drilled_m": 250.0,
+        "sample_count": 1,
+        "assay_count": 1,
+        "lithology_count": 2,
+        "property_count": 1,
+        "contact_count": 1,
+        "fault_observation_count": 0
+      }
+    },
+    {
+      "source_id": "EXAMPLE-CAMPAIGN:inclined_boreholes",
+      "kind": "inclined_boreholes",
+      "title": "Наклонное бурение",
+      "directory": "sources/inclined_boreholes",
+      "hole_ids": [
+        "EXAMPLE-I-BH-001"
+      ],
+      "table_names": [
+        "borehole_collars",
+        "borehole_lithology",
+        "borehole_assays",
+        "downhole_properties",
+        "structural_observations",
+        "fault_intersections"
+      ],
+      "summary": {
+        "hole_count": 1,
+        "drilled_m": 250.0,
+        "sample_count": 1,
+        "assay_count": 1,
+        "lithology_count": 2,
+        "property_count": 1,
+        "contact_count": 1,
+        "fault_observation_count": 0
+      }
+    }
+  ]
+}
