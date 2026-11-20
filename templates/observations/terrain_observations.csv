@@ -1,0 +1,5 @@
+campaign_id,observation_id,x_m,y_m,surface_elevation_m,elevation_uncertainty_m,slope_deg,local_relief_m,terrain_type,observation_method,survey_date
+EXAMPLE-CAMPAIGN,EXAMPLE-TER-001,125.0,125.0,63.4,0.25,2.5,5.7,hill,grid_elevation_survey,2026-01-16
+EXAMPLE-CAMPAIGN,EXAMPLE-TER-002,175.0,125.0,52.1,0.25,12.3,1.2,slope,grid_elevation_survey,2026-01-16
+EXAMPLE-CAMPAIGN,EXAMPLE-TER-003,375.0,125.0,-12.8,0.25,1.8,-4.2,depression,grid_elevation_survey,2026-01-16
+EXAMPLE-CAMPAIGN,EXAMPLE-TER-004,625.0,125.0,18.0,0.25,1.4,0.5,flat,grid_elevation_survey,2026-01-16

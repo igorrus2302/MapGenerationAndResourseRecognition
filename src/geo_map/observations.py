@@ -31,6 +31,9 @@ SUMMARY_FOLDERS = {
     **dict.fromkeys(BOREHOLE_SOURCE_TABLES, "boreholes"),
     **dict.fromkeys(("trenches", "trench_intervals", "trench_samples", "trench_paths"), "trenches"),
     "surface_geochemistry": "surface_geochemistry",
+    "outcrop_observations": "outcrops",
+    "terrain_observations": "terrain",
+    "geophysical_observations": "geophysics",
     "quality_control": "quality_control",
 }
 
@@ -156,11 +159,12 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
 
     for hole in holes:
         hole_id, x, y, depth = hole["hole_id"], hole["x_m"], hole["y_m"], hole["depth_m"]
+        hole["collar_elevation_m"] = sampler.column(x, y).get("surface_elevation_m", 0)
         rng = _rng(seed, "collar", hole_id)
         append("borehole_collars", hole_id=hole_id,
                x_m=round(x + rng.gauss(0, sigma("position_sigma_m")), 6),
                y_m=round(y + rng.gauss(0, sigma("position_sigma_m")), 6),
-               collar_elevation_m=0, total_depth_m=depth, azimuth_deg=hole["azimuth_deg"], dip_deg=hole["dip_deg"],
+               collar_elevation_m=hole["collar_elevation_m"], total_depth_m=depth, azimuth_deg=hole["azimuth_deg"], dip_deg=hole["dip_deg"],
                coordinate_system="local_cartesian", position_uncertainty_m=sigma("position_sigma_m"),
                drilling_method="synthetic_core", start_date=logged_date, end_date=logged_date, hole_status="completed")
         lithology = []
@@ -227,9 +231,9 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
                        qc_type="primary", qc_flag="not_checked")
 
     extra = extend_campaign(truth_map, config, seed, holes, source_samples, tables, append)
-    observed_ids = {item["observed_rock_id"] for item in tables["borehole_lithology"] + tables["trench_intervals"]}
+    observed_ids = {item["observed_rock_id"] for name in ("borehole_lithology", "trench_intervals", "outcrop_observations") for item in tables[name]}
     bundle = {
-        "schema_version": "1.3", "data_kind": "exploration_observations",
+        "schema_version": "1.6", "data_kind": "exploration_observations",
         "campaign": {"campaign_id": campaign_id, "title": config["title"], "date": logged_date,
                      "coordinate_system": "local_cartesian", "width_m": dimensions["width_m"], "height_m": dimensions["height_m"]},
         "plan": {"layout": config["drilling"].get("layout", "grid"), "sample_length_m": step,
@@ -242,12 +246,13 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
                     "assay_count": len(tables["borehole_assays"]), "lithology_count": len(tables["borehole_lithology"]),
                     "property_count": len(tables["downhole_properties"]),
                     "contact_count": sum(row["feature_type"] == "contact" for row in tables["structural_observations"]),
-                    "total_missing_sample_count": planned_samples - sample_count + extra["summary"]["trench_missing_sample_count"],
+                    "total_missing_sample_count": planned_samples - sample_count + extra["summary"]["trench_missing_sample_count"] + extra["summary"]["surface_unavailable_count"],
                     **extra["summary"]},
         "rock_catalog": [{"id": rock["id"], "name": rock["name"], "color": rock["color"]} for rock in rocks.values() if rock["id"] in observed_ids],
         "notes": [
             "Моделируются прямолинейные вертикальные и наклонные скважины, описание керна, интервальные анализы, физические свойства и включённые дополнительные методы.",
             "Скважинные total_depth_m, from_m, to_m и depth_m — расстояния вдоль ствола от устья. Азимут отсчитывается от +Y по часовой стрелке к +X; dip_deg — угол от горизонтали вниз, -90° означает вертикаль. Вертикальная глубина равна расстоянию вдоль ствола × sin(|dip_deg|).",
+            "Отметка устья и отметки обнажений заданы относительно общего нулевого уровня. Глубины почвенных и траншейных проб отсчитываются от местной поверхности.",
             "В скважинных и траншейных пробах содержание постоянно внутри сохранённого интервала минерализации; вне таких интервалов принято нулевым. Для почвенной геохимии используется отдельная условная модель фона и переноса.",
             "Шаг опробования не повышает пространственное разрешение исходной модели.",
             "Результат с квалификатором lt означает содержание ниже указанного предела обнаружения, а не измеренный ноль.",

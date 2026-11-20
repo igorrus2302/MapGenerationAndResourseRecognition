@@ -40,7 +40,7 @@ class Element {
   setAttribute(name, value) { this.attributes[name] = value; }
   appendChild(child) { this.children.push(child); }
   querySelector() { return new Element(); }
-  getContext() { return {}; }
+  getContext() { return new Proxy({createLinearGradient: () => ({addColorStop() {}})}, {get: (target, key) => target[key] ?? (() => {})}); }
   getBoundingClientRect() { return {width: 0, height: 0}; }
   focus() {}
 }
@@ -81,6 +81,32 @@ const context = vm.createContext({
 });
 new vm.Script(scripts[0]).runInContext(context);
 const observations = vm.runInContext('OBSERVATION_DATA', context);
+if (vm.runInContext('Boolean(MAP_DATA.terrain)', context)) {
+  const canvas = get('mapCanvas');
+  canvas.clientWidth = 960;
+  canvas.clientHeight = 650;
+  canvas.getBoundingClientRect = () => ({left: 0, top: 0});
+  const target = vm.runInContext(`(() => {
+    state.mode = 'terrain'; updateControls(); render();
+    const {geometry} = state.hitMap;
+    const cell = cells.find(item => item.intervals[0].rock_id !== terrain.surface_cover_rock_id) ?? cells[0];
+    return {name: rockById[cell.intervals[0].rock_id].name,
+      clientX: geometry.left + (cell.x_index + .5) * dims.cell_size_m * geometry.cellSize,
+      clientY: geometry.top + (dims.height_cells - cell.y_index - .5) * dims.cell_size_m * geometry.cellSize};
+  })()`, context);
+  canvas.fire('click', target);
+  assert.ok(get('cellInfo').innerHTML.includes(target.name));
+  assert.ok(get('cellInfo').innerHTML.includes('Отметка поверхности'));
+  vm.runInContext("state.mode = 'vertical-x'; updateControls(); render(); state.mode = '3d'; updateControls(); render()", context);
+  if (vm.runInContext('Boolean(MAP_DATA.geophysics)', context)) {
+    for (const mode of ['magnetic', 'gamma']) {
+      vm.runInContext(`state.mode = '${mode}'; updateControls(); render()`, context);
+      canvas.fire('click', target);
+      assert.match(get('cellInfo').innerHTML, /Магнитная аномалия/);
+      assert.match(get('cellInfo').innerHTML, /Гамма-фон/);
+    }
+  }
+}
 
 assert.equal(location.hash, '#truth');
 assert.equal(get('truthPanel').classList.contains('hidden'), false);
@@ -136,7 +162,10 @@ if (!observations) {
   assert.equal(get('expeditionPanel').classList.contains('hidden'), false);
   get('downloadObservations').click();
   get('downloadObservationCsv').click();
-  assert.equal(get('expeditionSections').children.length, 5);
+  const hasOutcrops = observations.plan.methods?.outcrops?.enabled;
+  const hasTerrainSurvey = observations.plan.methods?.terrain_survey?.enabled;
+  const hasGeophysics = observations.plan.methods?.geophysical_survey?.enabled;
+  assert.equal(get('expeditionSections').children.length, 5 + Number(Boolean(hasOutcrops)) + Number(Boolean(hasTerrainSurvey)) + Number(Boolean(hasGeophysics)));
   get('expeditionSections').children[1].click();
   assert.equal(get('surfaceOverview').classList.contains('hidden'), false);
   assert.equal(get('boreholeOverview').classList.contains('hidden'), true);
@@ -199,6 +228,61 @@ if (!observations) {
   assert.equal(get('sourceFilterLabel').classList.contains('hidden'), true);
   assert.equal(get('downloadDrillingSource').classList.contains('hidden'), true);
   assert.equal(get('downloadObservationCsv').textContent, 'CSV всей таблицы');
+  const recognition = vm.runInContext('RECOGNITION_DATA', context);
+  const recognitionDownload = blobs.length;
+  get('tab-recognized').click();
+  assert.equal(get('recognitionEmpty').classList.contains('hidden'), Boolean(recognition));
+  if (recognition) {
+    assert.equal(get('recognitionContent').classList.contains('hidden'), false);
+    assert.ok(!get('recognitionMap').innerHTML.includes('NaN'));
+    if (recognition.targets.length) {
+      const target = recognition.targets[0];
+      assert.ok(get('recognitionTargets').innerHTML.includes(target.site_id));
+      if (target.terrain_context) assert.ok(get('recognitionTargets').innerHTML.includes(`data-terrain-observation="${target.terrain_context.observation_id}"`));
+      assert.ok(get('recognitionMap').innerHTML.includes(`${target.analyte} · ${target.site_id}`));
+      get('recognitionAnalyte').value = target.analyte;
+      get('recognitionAnalyte').fire('change');
+      const expected = recognition.targets.filter(row => row.analyte === target.analyte).length;
+      assert.equal((get('recognitionTargets').innerHTML.match(/<tr>/g) || []).length, expected);
+    } else {
+      assert.match(get('recognitionTargets').innerHTML, /Нет целей/);
+    }
+    get('downloadRecognition').click();
+  }
+  const outcropDownload = blobs.length;
+  if (hasOutcrops) {
+    get('tab-expedition').click();
+    get('expeditionSections').children[5].click();
+    assert.equal(get('outcropOverview').classList.contains('hidden'), false);
+    const outcrops = observations.tables.outcrop_observations;
+    assert.ok(!get('outcropMap').innerHTML.includes('NaN'));
+    assert.equal((get('outcropMap').innerHTML.match(/<circle/g) || []).length, outcrops.length);
+    get('downloadMethodGeoJson').click();
+  }
+  const terrainDownload = blobs.length;
+  if (hasTerrainSurvey) {
+    get('tab-expedition').click();
+    get('expeditionSections').children[5 + Number(Boolean(hasOutcrops))].click();
+    assert.equal(get('terrainSurveyOverview').classList.contains('hidden'), false);
+    const terrain = observations.tables.terrain_observations;
+    assert.ok(!get('terrainSurveyMap').innerHTML.includes('NaN'));
+    assert.equal((get('terrainSurveyMap').innerHTML.match(/<circle/g) || []).length, terrain.length);
+    assert.match(get('observationTableHead').innerHTML, /Тип рельефа/);
+    get('downloadMethodGeoJson').click();
+  }
+  const geophysicalDownload = blobs.length;
+  if (hasGeophysics) {
+    get('tab-expedition').click();
+    get('expeditionSections').children.at(-1).click();
+    assert.equal(get('geophysicalOverview').classList.contains('hidden'), false);
+    const field = observations.tables.geophysical_observations;
+    assert.equal((get('geophysicalMap').innerHTML.match(/<circle/g) || []).length, field.length);
+    get('geophysicalChannel').value = 'gamma';
+    get('geophysicalChannel').fire('change');
+    assert.ok(!get('geophysicalMap').innerHTML.includes('NaN'));
+    if (field.length) assert.match(get('geophysicalMap').innerHTML, /имп\/с/);
+    get('downloadMethodGeoJson').click();
+  }
   Promise.all(blobs.map(blob => blob.text())).then(values => {
     const [json, csv, surfaceJson, trenchJson] = values;
     assert.equal(json, JSON.stringify(observations, null, 2));
@@ -206,6 +290,10 @@ if (!observations) {
     assert.match(csv, /^"campaign_id","sample_id","hole_id"/);
     assert.equal(JSON.parse(surfaceJson).features.length, observations.tables.surface_geochemistry.length);
     assert.equal(JSON.parse(trenchJson).features.length, observations.tables.trenches.length);
+    if (recognition) assert.equal(values[recognitionDownload], JSON.stringify(recognition, null, 2));
+    if (hasOutcrops) assert.equal(JSON.parse(values[outcropDownload]).features.length, observations.summary.outcrop_count);
+    if (hasTerrainSurvey) assert.equal(JSON.parse(values[terrainDownload]).features.length, observations.summary.terrain_observation_count);
+    if (hasGeophysics) assert.equal(JSON.parse(values[geophysicalDownload]).features.length, observations.summary.geophysical_observation_count);
     for (const {source, index} of sourceDownloads) {
       const pack = JSON.parse(values[index]);
       assert.equal(pack.source.kind, source.kind);
@@ -221,6 +309,6 @@ if (!observations) {
       const savedSource = path.join(folder, 'observations', source.directory, 'observations.json');
       if (fs.existsSync(savedSource)) assert.deepEqual(pack, JSON.parse(fs.readFileSync(savedSource, 'utf8')));
     }
-    console.log('Expedition sections, independent drilling sources, filters, profiles and JSON/CSV/GeoJSON downloads: OK');
+    console.log('Expedition views, recognition map, filters and JSON/CSV/GeoJSON downloads: OK');
   }).catch(error => { console.error(error); process.exitCode = 1; });
 }

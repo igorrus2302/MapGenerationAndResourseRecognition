@@ -210,7 +210,7 @@ class ObservationTests(unittest.TestCase):
             html = build_viewer(self.truth, Path(directory) / "viewer.html", observations=bundle).read_text()
             for panel in ("truthPanel", "expeditionPanel", "recognizedPanel"):
                 self.assertIn(f'id="{panel}"', html)
-            self.assertIn("Алгоритм распознавания пока не реализован", html)
+            self.assertIn("Результаты поиска ещё не загружены", html)
             self.assertNotIn('<script>alert(1)</script>', html)
             literal = html.split("const OBSERVATION_DATA = ", 1)[1].split(";\n", 1)[0]
             self.assertEqual(json.loads(literal), bundle)

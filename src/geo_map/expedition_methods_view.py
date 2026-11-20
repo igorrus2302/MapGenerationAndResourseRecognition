@@ -41,13 +41,28 @@ METHODS_HTML = r'''
         <p id="qualityCaption"></p>
         <p>Дубликаты сравниваются с измеренными исходными пробами, стандарты — с известным контрольным содержанием, холостые пробы — с абсолютным допуском. При цензурировании результата численная оценка может быть недоступна. Эти проверки не подтверждают каждый отдельный первичный анализ.</p>
       </div>
+      <div id="outcropOverview" class="panel-card method-overview hidden">
+        <h3>Наблюдённые обнажения</h3>
+        <div class="muted" id="outcropCaption"></div>
+        <svg id="outcropMap" class="method-map" viewBox="0 0 650 300" role="img" aria-label="Точки наблюдения обнажений"></svg>
+      </div>
+      <div id="terrainSurveyOverview" class="panel-card method-overview hidden">
+        <h3>Типы рельефа по полевым измерениям</h3>
+        <div class="muted" id="terrainSurveyCaption"></div>
+        <svg id="terrainSurveyMap" class="method-map" viewBox="0 0 650 300" role="img" aria-label="Типы рельефа в точках съёмки"></svg>
+        <p id="terrainSurveyLegend"></p>
+      </div>
+      <div id="geophysicalOverview" class="panel-card method-overview hidden">
+        <div class="method-toolbar"><div><h3>Наземная геофизическая съёмка</h3><div id="geophysicalCaption" class="muted"></div></div><select id="geophysicalChannel" aria-label="Канал геофизической съёмки"><option value="magnetic">Магнитная аномалия</option><option value="gamma">Гамма-фон</option></select></div>
+        <svg id="geophysicalMap" class="method-map" viewBox="0 0 650 300" role="img" aria-label="Значения геофизической съёмки"></svg>
+      </div>
 '''
 
 METHODS_SCRIPT = r'''
       Object.assign(fieldNames, {
         trench_id: 'Траншея', start_x_m: 'Начало X, м', start_y_m: 'Начало Y, м', end_x_m: 'Конец X, м', end_y_m: 'Конец Y, м', width_m: 'Ширина, м', surveyed_length_m: 'Длина, м', trench_status: 'Состояние', survey_date: 'Дата съёмки',
         sample_date: 'Дата отбора', sample_material: 'Материал', sampling_depth_from_m: 'Глубина отбора от, м', sampling_depth_to_m: 'Глубина отбора до, м', sampling_method: 'Способ отбора', parent_sample_id: 'Исходная проба',
-        control_id: 'Контроль', sample_source: 'Источник пробы', reference_value: 'Контрольное значение', reference_uncertainty: 'Неопределённость стандарта', absolute_difference: 'Абсолютное отклонение', relative_difference_percent: 'Относительное отклонение, %', acceptance_limit: 'Допуск', acceptance_unit: 'Единица допуска'
+        control_id: 'Контроль', sample_source: 'Источник пробы', reference_value: 'Контрольное значение', reference_uncertainty: 'Неопределённость стандарта', absolute_difference: 'Абсолютное отклонение', relative_difference_percent: 'Относительное отклонение, %', acceptance_limit: 'Допуск', acceptance_unit: 'Единица допуска', surface_elevation_m: 'Отметка поверхности, м'
       });
       Object.assign(categoryNames, {fault: 'Зона разлома', oriented_core: 'Ориентированный керн', duplicate: 'Дубликат', blank: 'Холостая', standard: 'Стандарт', pass: 'В пределах допуска', warning: 'Предупреждение', fail: 'Вне допуска', soil: 'Почва', rock: 'Порода', regolith: 'Рыхлый смешанный материал', channel: 'Канавное', grid_soil_sample: 'Почвенное по сетке', soil_sample: 'Почвенное', borehole: 'Скважина', surface: 'Поверхность', trench: 'Траншея', laboratory: 'Лаборатория'});
       const sections = {
@@ -57,6 +72,31 @@ METHODS_SCRIPT = r'''
         structures: {label: 'Структуры', panel: 'structureOverview', tables: ['structural_observations', 'fault_intersections']},
         quality: {label: 'Контроль качества', panel: 'qualityOverview', tables: ['quality_control']}
       };
+      if (observations.plan.methods?.outcrops?.enabled && observations.table_fields.outcrop_observations) {
+        sections.outcrops = {label: 'Обнажения', panel: 'outcropOverview', tables: ['outcrop_observations'], geojson: 'outcrop_observations'};
+        tableNames.outcrop_observations = 'Полевые точки';
+        categoryNames.surface_mapping = 'Осмотр поверхности';
+      }
+      const terrainTypes = {
+        hill: {label: 'Возвышенность', color: '#ad542c'}, depression: {label: 'Понижение', color: '#226caa'},
+        slope: {label: 'Склон', color: '#6544a6'}, flat: {label: 'Ровный участок', color: '#288362'},
+        undetermined: {label: 'Мало данных', color: '#64748b'}
+      };
+      if (observations.plan.methods?.terrain_survey?.enabled && observations.table_fields.terrain_observations) {
+        sections.terrainSurvey = {label: 'Тип рельефа', panel: 'terrainSurveyOverview', tables: ['terrain_observations'], geojson: 'terrain_observations'};
+        tableNames.terrain_observations = 'Точки съёмки';
+        Object.assign(fieldNames, {elevation_uncertainty_m: 'Погрешность высоты, м', slope_deg: 'Уклон, °',
+          local_relief_m: 'Относительная высота, м', terrain_type: 'Тип рельефа'});
+        for (const [code, info] of Object.entries(terrainTypes)) categoryNames[code] = info.label;
+        categoryNames.grid_elevation_survey = 'Съёмка высот по сетке';
+      }
+      if (observations.plan.methods?.geophysical_survey?.enabled && observations.table_fields.geophysical_observations) {
+        sections.geophysics = {label: 'Геофизика', panel: 'geophysicalOverview', tables: ['geophysical_observations'], geojson: 'geophysical_observations'};
+        tableNames.geophysical_observations = 'Точки геофизической съёмки';
+        Object.assign(fieldNames, {magnetic_anomaly_nt: 'Магнитная аномалия, нТл', magnetic_sigma_nt: 'Погрешность магнитного канала, нТл',
+          gamma_count_rate_cps: 'Гамма-фон, имп/с', gamma_sigma_cps: 'Погрешность гамма-канала, имп/с'});
+        categoryNames.ground_geophysical_survey = 'Наземная геофизическая съёмка';
+      }
       const sectionButtons = {};
       let activeSection = 'boreholes';
       const trenches = tables.trenches || [];
@@ -94,6 +134,53 @@ METHODS_SCRIPT = r'''
         const point = (x, y) => ({x: left + x * scale, y: top + h - y * scale});
         const markup = `<rect x="${left}" y="${top}" width="${w}" height="${h}" rx="5" fill="#f0f6f8" stroke="#b7ccd8"/><text x="${left}" y="${top - 7}" font-size="11" fill="#627d98">Y · ${number(height)} м</text><text x="${left}" y="${top + h + 20}" font-size="11" fill="#627d98">0</text><text x="${left + w}" y="${top + h + 20}" text-anchor="end" font-size="11" fill="#627d98">X · ${number(width)} м</text>`;
         return {point, markup};
+      }
+      if (sections.outcrops) {
+        const outcrops = tables.outcrop_observations;
+        const {point, markup} = mapFrame();
+        element('outcropMap').innerHTML = markup + outcrops.map(row => {
+          const {x, y} = point(row.x_m, row.y_m);
+          const color = rocks[row.observed_rock_id]?.color || '#1677a8';
+          return `<circle cx="${x}" cy="${y}" r="4.5" fill="${escape(color)}" stroke="#243b53"><title>${escape(row.observation_id)} · ${escape(row.observed_rock_name)} · ${number(row.surface_elevation_m)} м</title></circle>`;
+        }).join('');
+        element('outcropCaption').textContent = `${number(outcrops.length)} обнажений на ${number(observations.plan.methods.outcrops.point_count)} обследованных точках. Цвет соответствует наблюдённой породе.`;
+      }
+      if (sections.terrainSurvey) {
+        const rows = tables.terrain_observations;
+        const config = observations.plan.methods.terrain_survey;
+        const {point, markup} = mapFrame();
+        const radius = Math.max(1.25, Math.min(4.25, 85 / Math.sqrt(rows.length || 1)));
+        const counts = new Map();
+        element('terrainSurveyMap').innerHTML = markup + rows.map(row => {
+          const {x, y} = point(row.x_m, row.y_m);
+          const type = terrainTypes[row.terrain_type] || terrainTypes.undetermined;
+          counts.set(type.label, (counts.get(type.label) || 0) + 1);
+          return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${type.color}"><title>${escape(row.observation_id)} · ${type.label} · ${number(row.surface_elevation_m)} м</title></circle>`;
+        }).join('');
+        element('terrainSurveyCaption').textContent = `${number(rows.length)} точек · порог уклона ${number(config.slope_threshold_deg)}° · порог относительной высоты ${number(config.local_relief_threshold_m)} м`;
+        element('terrainSurveyLegend').innerHTML = Object.values(terrainTypes).filter(type => counts.has(type.label))
+          .map(type => `<span style="color:${type.color}">● ${type.label} · ${number(counts.get(type.label))}</span>`).join(' &nbsp; ');
+      }
+      if (sections.geophysics) {
+        const selector = element('geophysicalChannel');
+        const rows = tables.geophysical_observations;
+        function drawGeophysics() {
+          const {field, label, unit} = geophysicalChannels[selector.value];
+          const values = rows.map(row => row[field]);
+          const minimum = Math.min(...values), maximum = Math.max(...values);
+          const {point, markup} = mapFrame();
+          const radius = Math.max(1.25, Math.min(4.25, 85 / Math.sqrt(rows.length || 1)));
+          element('geophysicalMap').innerHTML = markup + rows.map(row => {
+            const {x, y} = point(row.x_m, row.y_m);
+            const scaled = minimum === maximum ? .5 : (row[field] - minimum) / (maximum - minimum);
+            return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${geophysicalColor(scaled)}"><title>${escape(row.observation_id)} · ${label} ${number(row[field])} ${unit}</title></circle>`;
+          }).join('');
+          element('geophysicalCaption').textContent = rows.length
+            ? `${number(rows.length)} точек · от ${number(minimum)} ${unit} (синий) до ${number(maximum)} ${unit} (оранжевый)`
+            : 'Для этой экспедиции измерений геофизики нет.';
+        }
+        selector.addEventListener('change', drawGeophysics);
+        drawGeophysics();
       }
       const surfaceAnalytes = observations.plan.methods?.surface_geochemistry?.analytes || [];
       element('surfaceMapAnalyte').innerHTML = surfaceAnalytes.map(item => `<option value="${escape(item.analyte)}">${escape(item.analyte)} · ${escape(item.unit)}</option>`).join('');

@@ -20,6 +20,9 @@ OBJECT_TABLES = {
     "borehole_samples": ("sample_id", ("borehole_assays",)),
     "trench_samples": ("sample_id", ("trench_samples",)),
     "surface_samples": ("sample_id", ("surface_geochemistry",)),
+    "outcrop_observations": ("observation_id", ("outcrop_observations",)),
+    "terrain_observations": ("observation_id", ("terrain_observations",)),
+    "geophysical_observations": ("observation_id", ("geophysical_observations",)),
     "quality_control_samples": ("sample_id", ("quality_control",)),
     "structural_observations": ("observation_id", ("structural_observations", "fault_intersections")),
 }
@@ -55,8 +58,9 @@ def _object_layout(groups: dict, collars: list[dict]):
     }
     paths = {kind: {identifier: f"{folder}/{names[kind][identifier]}.json" for identifier, folder in entries.items()}
              for kind, entries in folders.items()}
-    paths["surface_samples"] = {identifier: f"surface_geochemistry/{name}.json"
-                                for identifier, name in names["surface_samples"].items()}
+    for kind, folder in (("surface_samples", "surface_geochemistry"), ("outcrop_observations", "outcrops"),
+                         ("terrain_observations", "terrain"), ("geophysical_observations", "geophysics")):
+        paths[kind] = {identifier: f"{folder}/{name}.json" for identifier, name in names[kind].items()}
     paths["quality_control_samples"] = {}
     for identifier, name in names["quality_control_samples"].items():
         control = groups["quality_control_samples"][identifier]["quality_control"][0]

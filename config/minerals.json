@@ -21,6 +21,7 @@
     },
     {
       "id": "iron",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.065},
       "name": "Пластовое железорудное месторождение",
       "mineral": "Fe",
       "minecraft_analogue": "Iron Ore",
@@ -146,6 +147,7 @@
     },
     {
       "id": "uranium",
+      "geophysical_source": {"gamma_response_cps": 900},
       "name": "Песчаниковое урановое месторождение",
       "mineral": "U₃O₈",
       "minecraft_analogue": "—",

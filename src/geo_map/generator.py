@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .geophysics import add_geophysical_fields, validate_geophysical_model
+
 
 def _read_json(path: str | Path) -> dict[str, Any]:
     json_path = Path(path)
@@ -64,6 +66,7 @@ def _validate_config(config: dict[str, Any]) -> None:
     for rock in rocks:
         _range_pair(rock.get("density_g_cm3"), f"rocks.{rock['id']}.density_g_cm3")
         _range_pair(rock.get("porosity_percent"), f"rocks.{rock['id']}.porosity_percent")
+    validate_geophysical_model(config.get("geophysics", {}), rocks, config["minerals"])
 
     geology = config["geology"]
     layer_low, layer_high = _range_pair(geology.get("layer_count"), "geology.layer_count")
@@ -108,6 +111,16 @@ def _validate_config(config: dict[str, Any]) -> None:
         raise ValueError("Максимальное число слоёв превышает число доступных пород")
 
     total_depth = map_config["depth_cells"] * map_config["depth_step_m"]
+    terrain = config.get("terrain", {})
+    if not isinstance(terrain, dict) or not isinstance(terrain.get("enabled", False), bool):
+        raise ValueError("terrain.enabled: требуется логическое значение")
+    if terrain.get("enabled"):
+        low, high = _range_pair(terrain.get("elevation_range_m"), "terrain.elevation_range_m")
+        scale = terrain.get("feature_scale_m")
+        if not all(map(math.isfinite, (low, high))) or not -total_depth < round(low, 3) < round(high, 3):
+            raise ValueError("terrain.elevation_range_m: поверхность должна быть выше дна модели")
+        if isinstance(scale, bool) or not isinstance(scale, (int, float)) or not math.isfinite(scale) or scale <= 0:
+            raise ValueError("terrain.feature_scale_m: требуется положительный масштаб в метрах")
     _, surface_high = _range_pair(
         geology.get("surface_thickness_m"), "geology.surface_thickness_m"
     )
@@ -1528,6 +1541,35 @@ def _apply_deposits(
             )
 
 
+def _terrain_elevations(map_config: dict[str, Any], terrain: dict[str, Any], seed: int) -> list[float]:
+    width, height = map_config["width_cells"], map_config["height_cells"]
+    if not terrain.get("enabled"):
+        return [0] * (width * height)
+    step = map_config["cell_size_m"]
+    values = [_fractal_noise_2d(seed, (x + .5) * step, (y + .5) * step, terrain["feature_scale_m"], "terrain")
+              for y in range(height) for x in range(width)]
+    low, high = terrain["elevation_range_m"]
+    minimum, maximum = min(values), max(values)
+    if minimum == maximum:
+        return [round((low + high) / 2, 3)] * len(values)
+    return [round(low + (high - low) * (value - minimum) / (maximum - minimum), 3) for value in values]
+
+
+def _shape_surface(intervals: list[dict[str, Any]], elevation: float) -> list[dict[str, Any]]:
+    """Drape the cover on hills and erode the original strata in depressions."""
+    if elevation == 0:
+        return intervals
+    surface_depth = -elevation
+    soil, *bedrock = intervals
+    bedrock_top = max(surface_depth, min(soil["to_depth_m"], surface_depth + soil["to_depth_m"]))
+    remaining = [interval for interval in bedrock if interval["to_depth_m"] > bedrock_top]
+    remaining[0]["from_depth_m"] = bedrock_top
+    if surface_depth < bedrock_top:
+        soil.update(from_depth_m=surface_depth, to_depth_m=bedrock_top)
+        remaining.insert(0, soil)
+    return remaining
+
+
 def generate_map(config: dict[str, Any], seed: int | None = None) -> dict[str, Any]:
     """Generate a complete synthetic ground-truth map in interval form."""
     _validate_config(config)
@@ -1537,6 +1579,8 @@ def generate_map(config: dict[str, Any], seed: int | None = None) -> dict[str, A
     map_config["seed"] = effective_seed
     layers = _generate_layers(config, effective_seed)
     faults = _generate_faults(map_config, config["geology"], effective_seed)
+    terrain_enabled = config.get("terrain", {}).get("enabled", False)
+    elevations = _terrain_elevations(map_config, config.get("terrain", {}), effective_seed)
 
     cells: list[dict[str, Any]] = []
     for y_index in range(map_config["height_cells"]):
@@ -1553,14 +1597,15 @@ def generate_map(config: dict[str, Any], seed: int | None = None) -> dict[str, A
             intervals = _make_intervals(
                 config["rocks"], layers, boundaries, x_index, y_index, effective_seed
             )
+            elevation = elevations[len(cells)]
             cells.append(
                 {
                     "x_index": x_index,
                     "y_index": y_index,
                     "x_m": x_index * map_config["cell_size_m"],
                     "y_m": y_index * map_config["cell_size_m"],
-                    "surface_elevation_m": 0,
-                    "intervals": intervals,
+                    "surface_elevation_m": elevation,
+                    "intervals": _shape_surface(intervals, elevation),
                     "mineralization": [],
                 }
             )
@@ -1584,11 +1629,16 @@ def generate_map(config: dict[str, Any], seed: int | None = None) -> dict[str, A
     mineralized_cells = sum(bool(cell["mineralization"]) for cell in cells)
 
     total_depth = map_config["depth_cells"] * map_config["depth_step_m"]
-    return {
-        "schema_version": "2.0",
+    truth = {
+        "schema_version": "2.1" if terrain_enabled else "2.0",
         "map_kind": "synthetic_ground_truth",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "seed": effective_seed,
+        **({"terrain": {"vertical_reference": "depth_positive_down_from_datum",
+                       "surface_cover_rock_id": config["geology"]["surface_rock_id"],
+                       "min_elevation_m": min(elevations), "max_elevation_m": max(elevations),
+                       "exposed_cell_count": sum(cell["intervals"][0]["rock_id"] != config["geology"]["surface_rock_id"] for cell in cells)}}
+           if terrain_enabled else {}),
         "dimensions": {
             "width_cells": map_config["width_cells"],
             "height_cells": map_config["height_cells"],
@@ -1612,6 +1662,8 @@ def generate_map(config: dict[str, Any], seed: int | None = None) -> dict[str, A
         },
         "cells": cells,
     }
+    add_geophysical_fields(truth, config.get("geophysics", {}), config["rocks"], config["minerals"])
+    return truth
 
 
 def save_map(data: dict[str, Any], path: str | Path) -> Path:

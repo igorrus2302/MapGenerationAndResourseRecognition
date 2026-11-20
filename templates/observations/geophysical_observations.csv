@@ -1,0 +1,3 @@
+campaign_id,observation_id,x_m,y_m,surface_elevation_m,magnetic_anomaly_nt,magnetic_sigma_nt,gamma_count_rate_cps,gamma_sigma_cps,position_uncertainty_m,observation_method,survey_date
+EXAMPLE-CAMPAIGN,EXAMPLE-GEO-001,125.0,125.0,46.2,83.4,4,18.5,2,1.5,ground_geophysical_survey,2026-01-16
+EXAMPLE-CAMPAIGN,EXAMPLE-GEO-002,175.0,125.0,-12.1,-14.2,4,62.5,2,1.5,ground_geophysical_survey,2026-01-16

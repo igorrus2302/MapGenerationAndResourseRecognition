@@ -2,6 +2,7 @@
   "rocks": [
     {
       "id": "soil",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0004, "gamma_response_cps": 16},
       "name": "Почва",
       "category": "surface",
       "minecraft_analogue": "Dirt",
@@ -20,6 +21,7 @@
     },
     {
       "id": "granite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.002, "gamma_response_cps": 55},
       "name": "Гранит",
       "category": "igneous",
       "minecraft_analogue": "Granite",
@@ -29,6 +31,7 @@
     },
     {
       "id": "diorite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.007, "gamma_response_cps": 22},
       "name": "Диорит",
       "category": "igneous",
       "minecraft_analogue": "Diorite",
@@ -38,6 +41,7 @@
     },
     {
       "id": "andesite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.007, "gamma_response_cps": 20},
       "name": "Андезит",
       "category": "igneous",
       "minecraft_analogue": "Andesite",
@@ -56,6 +60,7 @@
     },
     {
       "id": "tuff",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.002, "gamma_response_cps": 28},
       "name": "Туф",
       "category": "volcanic",
       "minecraft_analogue": "Tuff",
@@ -83,6 +88,7 @@
     },
     {
       "id": "limestone",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0002, "gamma_response_cps": 6},
       "name": "Известняк",
       "category": "sedimentary",
       "minecraft_analogue": "Calcite",
@@ -92,6 +98,7 @@
     },
     {
       "id": "sandstone",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0007, "gamma_response_cps": 13},
       "name": "Песчаник",
       "category": "sedimentary",
       "minecraft_analogue": "Sandstone",
@@ -101,6 +108,7 @@
     },
     {
       "id": "red_sandstone",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.002, "gamma_response_cps": 15},
       "name": "Красный песчаник",
       "category": "sedimentary",
       "minecraft_analogue": "Red Sandstone",
@@ -119,6 +127,7 @@
     },
     {
       "id": "basalt",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.016, "gamma_response_cps": 10},
       "name": "Базальт",
       "category": "volcanic",
       "minecraft_analogue": "Basalt",
@@ -146,6 +155,7 @@
     },
     {
       "id": "conglomerate",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.001, "gamma_response_cps": 13},
       "name": "Конгломерат",
       "category": "sedimentary",
       "minecraft_analogue": "—",
@@ -155,6 +165,7 @@
     },
     {
       "id": "siltstone",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0007, "gamma_response_cps": 20},
       "name": "Алевролит",
       "category": "sedimentary",
       "minecraft_analogue": "—",
@@ -164,6 +175,7 @@
     },
     {
       "id": "claystone",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0006, "gamma_response_cps": 24},
       "name": "Аргиллит",
       "category": "sedimentary",
       "minecraft_analogue": "—",
@@ -173,6 +185,7 @@
     },
     {
       "id": "shale",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0009, "gamma_response_cps": 25},
       "name": "Глинистый сланец",
       "category": "sedimentary",
       "minecraft_analogue": "—",
@@ -182,6 +195,7 @@
     },
     {
       "id": "carbonaceous_shale",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.001, "gamma_response_cps": 30},
       "name": "Углистый сланец",
       "category": "sedimentary",
       "minecraft_analogue": "Coal Ore",
@@ -191,6 +205,7 @@
     },
     {
       "id": "dolomite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0002, "gamma_response_cps": 5},
       "name": "Доломит",
       "category": "carbonate",
       "minecraft_analogue": "—",
@@ -200,6 +215,7 @@
     },
     {
       "id": "chert",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0003, "gamma_response_cps": 7},
       "name": "Кремнистая порода",
       "category": "sedimentary",
       "minecraft_analogue": "—",
@@ -209,6 +225,7 @@
     },
     {
       "id": "dacite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.004, "gamma_response_cps": 33},
       "name": "Дацит",
       "category": "volcanic",
       "minecraft_analogue": "—",
@@ -218,6 +235,7 @@
     },
     {
       "id": "rhyolite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.002, "gamma_response_cps": 53},
       "name": "Риолит",
       "category": "volcanic",
       "minecraft_analogue": "—",
@@ -227,6 +245,7 @@
     },
     {
       "id": "granodiorite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.004, "gamma_response_cps": 46},
       "name": "Гранодиорит",
       "category": "igneous",
       "minecraft_analogue": "—",
@@ -236,6 +255,7 @@
     },
     {
       "id": "gabbro",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.022, "gamma_response_cps": 7},
       "name": "Габбро",
       "category": "igneous",
       "minecraft_analogue": "—",
@@ -245,6 +265,7 @@
     },
     {
       "id": "peridotite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.018, "gamma_response_cps": 4},
       "name": "Перидотит",
       "category": "ultramafic",
       "minecraft_analogue": "—",
@@ -254,6 +275,7 @@
     },
     {
       "id": "slate",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.003, "gamma_response_cps": 23},
       "name": "Кристаллический сланец",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -263,6 +285,7 @@
     },
     {
       "id": "schist",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.005, "gamma_response_cps": 30},
       "name": "Слюдяной сланец",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -272,6 +295,7 @@
     },
     {
       "id": "gneiss",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.006, "gamma_response_cps": 43},
       "name": "Гнейс",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -281,6 +305,7 @@
     },
     {
       "id": "quartzite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.001, "gamma_response_cps": 7},
       "name": "Кварцит",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -290,6 +315,7 @@
     },
     {
       "id": "marble",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0003, "gamma_response_cps": 6},
       "name": "Мрамор",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -299,6 +325,7 @@
     },
     {
       "id": "amphibolite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.015, "gamma_response_cps": 10},
       "name": "Амфиболит",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -308,6 +335,7 @@
     },
     {
       "id": "serpentinite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.024, "gamma_response_cps": 6},
       "name": "Серпентинит",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -317,6 +345,7 @@
     },
     {
       "id": "ferruginous_quartzite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.035, "gamma_response_cps": 8},
       "name": "Железистый кварцит",
       "category": "metamorphic",
       "minecraft_analogue": "Iron Ore",
@@ -326,6 +355,7 @@
     },
     {
       "id": "kimberlite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.019, "gamma_response_cps": 9},
       "name": "Кимберлит",
       "category": "intrusive",
       "minecraft_analogue": "—",
@@ -335,6 +365,7 @@
     },
     {
       "id": "pegmatite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.001, "gamma_response_cps": 65},
       "name": "Пегматит",
       "category": "intrusive",
       "minecraft_analogue": "—",
@@ -344,6 +375,7 @@
     },
     {
       "id": "carbonatite",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.007, "gamma_response_cps": 35},
       "name": "Карбонатит",
       "category": "intrusive",
       "minecraft_analogue": "—",

@@ -10,6 +10,7 @@ from pathlib import Path
 from test_observations import campaign_config, small_map
 from geo_map.observations import generate_observations, save_observations
 from geo_map.observation_models import SurfaceModel
+from geo_map.observation_tools import TruthSampler
 
 
 def extended_map() -> dict:
@@ -51,6 +52,72 @@ class ExtendedObservationTests(unittest.TestCase):
 
     def generate(self, seed=1):
         return generate_observations(self.truth, self.config, seed=seed)
+
+    def test_terrain_survey_classifies_measured_profile_and_exports_records(self):
+        truth = small_map()
+        heights = (4, 4, 9, 4, 4, 4, -1, 4, 4)
+        template = truth["cells"][1]
+        truth["dimensions"].update(width_cells=len(heights), width_m=10 * len(heights))
+        truth["cells"] = []
+        for index, elevation in enumerate(heights):
+            cell = deepcopy(template)
+            cell.update(x_index=index, surface_elevation_m=elevation)
+            cell["intervals"][0]["from_depth_m"] = -elevation
+            truth["cells"].append(cell)
+        config = campaign_config()
+        config["terrain_survey"] = {"enabled": True, "point_count": len(heights), "elevation_sigma_m": 0.25}
+        bundle = generate_observations(truth, config, seed=200)
+        rows = bundle["tables"]["terrain_observations"]
+        self.assertEqual([row["surface_elevation_m"] for row in rows], list(heights))
+        self.assertEqual([row["terrain_type"] for row in rows],
+                         ["flat", "slope", "hill", "slope", "flat", "slope", "depression", "slope", "flat"])
+        self.assertEqual((rows[2]["slope_deg"], rows[2]["local_relief_m"], rows[6]["local_relief_m"]), (0, 5, -5))
+        self.assertEqual(rows[0]["elevation_uncertainty_m"], 0)
+        self.assertEqual(bundle["summary"]["terrain_observation_count"], len(heights))
+        with tempfile.TemporaryDirectory() as folder:
+            directory = save_observations(bundle, folder).parent
+            item = directory / "objects/terrain/TER-0003.json"
+            self.assertEqual(json.loads(item.read_text())["tables"]["terrain_observations"], [rows[2]])
+            path = directory / "tables/terrain/terrain_observations.geojson"
+            features = json.loads(path.read_text())["features"]
+            self.assertEqual(features[6]["geometry"]["coordinates"], [65, 5])
+            self.assertEqual(features[6]["properties"]["terrain_type"], "depression")
+
+    def test_isolated_terrain_point_has_no_estimated_class(self):
+        self.config["terrain_survey"] = {"enabled": True, "point_count": 1}
+        row, = self.generate()["tables"]["terrain_observations"]
+        self.assertEqual((row["slope_deg"], row["local_relief_m"], row["terrain_type"]), (None, None, "undetermined"))
+
+    def test_relief_shifts_sampling_and_exports_only_surveyed_exposures(self):
+        self.truth["terrain"] = {"surface_cover_rock_id": "soil", "min_elevation_m": -3, "max_elevation_m": 5}
+        hill, valley = self.truth["cells"]
+        hill["surface_elevation_m"] = 5
+        hill["intervals"][0].update(from_depth_m=-5, to_depth_m=-4)
+        hill["intervals"][1]["from_depth_m"] = -4
+        valley["surface_elevation_m"] = -3
+        valley["intervals"].pop(0)
+        valley["intervals"][0]["from_depth_m"] = 3
+        self.config["drilling"]["holes"][0].update(azimuth_deg=90, dip_deg=-60, depth_m=20)
+        self.config["outcrops"] = {"enabled": True, "point_count": 2}
+        bundle = self.generate()
+        tables = bundle["tables"]
+        self.assertEqual([row["collar_elevation_m"] for row in tables["borehole_collars"]], [5, -3])
+        self.assertEqual(bundle["summary"]["surface_unavailable_count"], 1)
+        self.assertEqual(bundle["summary"]["surface_sample_count"], 1)
+        exposure, = tables["outcrop_observations"]
+        self.assertEqual((exposure["observation_id"], exposure["x_m"], exposure["surface_elevation_m"], exposure["observed_rock_id"]),
+                         ("OUT-0002", 15, -3, "a"))
+        self.assertEqual([row["sample_material"] for row in tables["trench_intervals"]], ["soil", "rock"])
+        hole = self.config["drilling"]["holes"][0]
+        grade = TruthSampler(self.truth).sample_borehole(hole, 8, 10, self.config["analytes"])["grades"]["Cu"]
+        self.assertGreater(grade, 0)
+        with tempfile.TemporaryDirectory() as folder:
+            directory = save_observations(bundle, folder).parent
+            path = directory / "tables/outcrops/outcrop_observations.geojson"
+            feature, = json.loads(path.read_text())["features"]
+            self.assertEqual(feature["geometry"]["coordinates"], [15, 5])
+            obj = directory / "objects/outcrops/OUT-0002.json"
+            self.assertEqual(json.loads(obj.read_text())["tables"]["outcrop_observations"], [exposure])
 
     def test_all_four_methods_produce_linked_observations(self):
         bundle = self.generate()

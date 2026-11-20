@@ -6,6 +6,17 @@
     "cell_size_m": 10,
     "depth_step_m": 10
   },
+  "terrain": {
+    "enabled": true,
+    "elevation_range_m": [-55, 85],
+    "feature_scale_m": 420
+  },
+  "geophysics": {
+    "enabled": true,
+    "magnetic_decay_m": 110,
+    "magnetic_spread_m": 40,
+    "gamma_decay_m": 0.35
+  },
   "geology": {
     "layer_count": [6, 8],
     "surface_rock_id": "soil",

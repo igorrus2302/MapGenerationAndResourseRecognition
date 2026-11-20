@@ -25,14 +25,15 @@ class ObservationObjectTests(unittest.TestCase):
             manifest = read_json(root / "index.json")
             records = defaultdict(list)
             for kind, entries in manifest["objects"].items():
-                self.assertTrue(entries, kind)
+                if kind not in {"outcrop_observations", "terrain_observations", "geophysical_observations"}:
+                    self.assertTrue(entries, kind)
                 for identifier, path in entries.items():
                     item = read_json(root / path)
                     self.assertEqual((item["kind"], item["object_id"]), (kind, identifier))
                     self.assertEqual(item["campaign_id"], config["campaign_id"])
                     for name, rows in item["tables"].items():
                         records[name].extend(rows)
-            self.assertEqual(records.keys(), bundle["tables"].keys())
+            self.assertEqual(records.keys(), {name for name, rows in bundle["tables"].items() if rows})
             for name, rows in bundle["tables"].items():
                 self.assertCountEqual(records[name], rows, name)
 

@@ -47,6 +47,25 @@
       {"analyte": "Au", "unit": "g/t Au", "detection_limit": 0.001, "background_grade": 0.002, "response_factor": 0.02, "depth_decay_m": 50, "lateral_spread_m": 40, "background_scale_m": 100, "background_variation_fraction": 0.4}
     ]
   },
+  "outcrops": {
+    "enabled": true,
+    "point_count": 400,
+    "position_sigma_m": 1.5
+  },
+  "terrain_survey": {
+    "enabled": true,
+    "point_count": 400,
+    "elevation_sigma_m": 0.25,
+    "slope_threshold_deg": 7,
+    "local_relief_threshold_m": 3
+  },
+  "geophysical_survey": {
+    "enabled": true,
+    "point_count": 400,
+    "position_sigma_m": 1.5,
+    "magnetic_sigma_nt": 4,
+    "gamma_sigma_cps": 2
+  },
   "trenches": {
     "enabled": true,
     "layout": "grid",

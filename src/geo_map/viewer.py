@@ -154,6 +154,9 @@ HTML_TEMPLATE = r'''<!doctype html>
         <h2>Режим просмотра</h2>
         <select id="modeSelect">
           <option value="3d">3D-блок</option>
+          <option value="terrain">Рельеф и обнажения</option>
+          <option value="magnetic" id="truthMagneticOption">Магнитное поле</option>
+          <option value="gamma" id="truthGammaOption">Гамма-фон</option>
           <option value="vertical-x">Разрез по оси X</option>
           <option value="vertical-y">Разрез по оси Y</option>
           <option value="horizontal">Разрез по оси Z</option>
@@ -163,7 +166,7 @@ HTML_TEMPLATE = r'''<!doctype html>
       <div class="control-group hidden" id="depthControls">
         <h2>Координата Z</h2>
         <input id="depthSlider" type="range" min="0" step="1" value="5">
-        <div class="range-line"><span>Глубина Z</span><span class="value-badge" id="depthValue"></span></div>
+        <div class="range-line"><span id="depthLabel">Глубина Z</span><span class="value-badge" id="depthValue"></span></div>
       </div>
 
       <div class="control-group hidden" id="sliceControls">
@@ -218,6 +221,7 @@ HTML_TEMPLATE = r'''<!doctype html>
   <script>
     const MAP_DATA = __MAP_DATA__;
     const OBSERVATION_DATA = __OBSERVATION_DATA__;
+    const RECOGNITION_DATA = __RECOGNITION_DATA__;
 
     const canvas = document.getElementById('mapCanvas');
     const ctx = canvas.getContext('2d');
@@ -236,6 +240,12 @@ HTML_TEMPLATE = r'''<!doctype html>
     const rockById = Object.fromEntries(MAP_DATA.rocks.map(rock => [rock.id, rock]));
     const depositById = Object.fromEntries(MAP_DATA.deposits.map(deposit => [deposit.id, deposit]));
     const cells = MAP_DATA.cells;
+    const terrain = MAP_DATA.terrain;
+    const geophysicalChannels = {
+      magnetic: {field: 'magnetic_anomaly_nt', label: 'Магнитная аномалия', unit: 'нТл'},
+      gamma: {field: 'gamma_count_rate_cps', label: 'Гамма-фон', unit: 'имп/с'}
+    };
+    const highestDepth = terrain ? Math.floor(-terrain.max_elevation_m) : 0;
     const VIEW_STEP_M = 1;
     const presentRockIds = new Set(
       cells.flatMap(cell => cell.intervals.map(interval => interval.rock_id))
@@ -244,7 +254,7 @@ HTML_TEMPLATE = r'''<!doctype html>
 
     const state = {
       mode: '3d',
-      depthM: Math.min(5, dims.depth_m - 1),
+      depthM: Math.max(highestDepth, Math.min(5, dims.depth_m - 1)),
       slicePositionM: Math.floor(dims.width_m / 2),
       angle: -Math.PI / 4,
       zoom: 1,
@@ -271,7 +281,11 @@ HTML_TEMPLATE = r'''<!doctype html>
     function intervalAt(cell, depthM) {
       if (!cell) return null;
       return cell.intervals.find(interval => depthM >= interval.from_depth_m && depthM < interval.to_depth_m)
-        || cell.intervals[cell.intervals.length - 1];
+        || null;
+    }
+
+    function elevationAt(x, y, fallback) {
+      return cellAt(x, y)?.surface_elevation_m ?? fallback;
     }
 
     function mineralizationAt(cell, depthM) {
@@ -366,6 +380,8 @@ HTML_TEMPLATE = r'''<!doctype html>
       if (document.getElementById('truthPanel').classList.contains('hidden')) return;
       clearCanvas();
       if (state.mode === '3d') render3D();
+      else if (state.mode === 'terrain') renderTerrain();
+      else if (geophysicalChannels[state.mode]) renderGeophysicalField();
       else if (state.mode === 'horizontal') renderHorizontal();
       else renderVertical(state.mode === 'vertical-x' ? 'x' : 'y');
     }
@@ -401,7 +417,7 @@ HTML_TEMPLATE = r'''<!doctype html>
       const corners = [];
       for (const x of [0, dims.width_cells]) {
         for (const y of [0, dims.height_cells]) {
-          for (const z of [0, depthSteps]) corners.push(raw(x, y, z));
+          for (const z of [highestDepth / dims.depth_step_m, depthSteps]) corners.push(raw(x, y, z));
         }
       }
       const minX = Math.min(...corners.map(point => point.x));
@@ -432,16 +448,31 @@ HTML_TEMPLATE = r'''<!doctype html>
           const cell = cellAt(x, y);
           const rock = rockById[cell.intervals[0].rock_id];
           if (!state.visibleRocks.has(rock.id)) continue;
+          const elevation = cell.surface_elevation_m ?? 0;
+          const z = -elevation / dims.depth_step_m;
+          const shade = surfaceShade(cell);
           const points = [
-            projection.point(x, y, 0), projection.point(x + 1, y, 0),
-            projection.point(x + 1, y + 1, 0), projection.point(x, y + 1, 0)
+            projection.point(x, y, z), projection.point(x + 1, y, z),
+            projection.point(x + 1, y + 1, z), projection.point(x, y + 1, z)
           ];
           baseShapes.push({
             points,
             depth: points.reduce((sum, point) => sum + point.depth, 0) / points.length,
-            fill: rgba(rock.color, 1, 1.05),
+            fill: rgba(rock.color, 1, shade),
             stroke: 'rgba(20,48,70,.11)'
           });
+          const stepX = projection.sin >= 0 ? 1 : -1, stepY = projection.cos >= 0 ? 1 : -1;
+          for (const [otherX, otherY, a, b] of [
+            [x + stepX, y, [x + (stepX > 0 ? 1 : 0), y], [x + (stepX > 0 ? 1 : 0), y + 1]],
+            [x, y + stepY, [x, y + (stepY > 0 ? 1 : 0)], [x + 1, y + (stepY > 0 ? 1 : 0)]]
+          ]) {
+            const lower = elevationAt(otherX, otherY, elevation);
+            if (lower >= elevation) continue;
+            const bottom = -lower / dims.depth_step_m;
+            const edge = [projection.point(...a, z), projection.point(...b, z), projection.point(...b, bottom), projection.point(...a, bottom)];
+            baseShapes.push({points: edge, depth: edge.reduce((sum, point) => sum + point.depth, 0) / edge.length,
+                             fill: rgba(rock.color, 1, shade * .72), stroke: null});
+          }
         }
       }
 
@@ -564,6 +595,7 @@ HTML_TEMPLATE = r'''<!doctype html>
         for (let x = 0; x < dims.width_cells; x++) {
           const cell = cellAt(x, y);
           const interval = intervalAt(cell, depthM);
+          if (!interval) continue;
           const rock = rockById[interval.rock_id];
           const sx = geometry.left + cell.x_m * geometry.cellSize;
           const sy = geometry.top + cell.y_m * geometry.cellSize;
@@ -577,8 +609,74 @@ HTML_TEMPLATE = r'''<!doctype html>
           }
         }
       }
-      drawGridFrame(geometry, `Разрез по оси Z: глубина ${Math.round(depthM)} м`);
+      drawGridFrame(geometry, terrain ? `Разрез по оси Z · отметка ${-depthM} м` : `Разрез по оси Z: глубина ${Math.round(depthM)} м`);
       state.hitMap = {type: 'horizontal', geometry, depthM};
+    }
+
+    function surfaceShade(cell) {
+      const {x_index: x, y_index: y, surface_elevation_m: elevation = 0} = cell;
+      const dx = elevationAt(x + 1, y, elevation) - elevationAt(x - 1, y, elevation);
+      const dy = elevationAt(x, y + 1, elevation) - elevationAt(x, y - 1, elevation);
+      return Math.max(.68, Math.min(1.28, 1.05 + (dx + dy) / (4 * dims.cell_size_m)));
+    }
+
+    function renderTerrain() {
+      const geometry = gridGeometry(dims.width_m, dims.height_m);
+      const size = geometry.cellSize * dims.cell_size_m;
+      const low = terrain?.min_elevation_m ?? 0, high = terrain?.max_elevation_m ?? 0;
+      const palette = ['#477581', '#79a785', '#c3c38a', '#eee0c3'];
+      const exposure = cell => terrain && cell && cell.intervals[0].rock_id !== terrain.surface_cover_rock_id;
+      for (const cell of cells) {
+        const fraction = ((cell.surface_elevation_m ?? 0) - low) / (high - low || 1);
+        const swatch = palette[Math.min(palette.length - 1, Math.floor(fraction * palette.length))];
+        const left = geometry.left + cell.x_index * size;
+        const top = geometry.top + (dims.height_cells - 1 - cell.y_index) * size;
+        const rock = rockById[cell.intervals[0].rock_id];
+        const shade = surfaceShade(cell);
+        ctx.fillStyle = rgba(swatch, 1, shade);
+        ctx.fillRect(left, top, size + .3, size + .3);
+        if (exposure(cell) && state.visibleRocks.has(rock.id)) {
+          ctx.fillStyle = rgba(rock.color, 1, shade);
+          ctx.fillRect(left, top, size + .3, size + .3);
+        }
+      }
+      drawGridFrame({...geometry, invertY: true}, 'Рельеф · коренные породы выделены цветом легенды');
+      const legendY = geometry.top + geometry.gridHeight + 33;
+      for (const [index, color] of palette.entries()) {
+        ctx.fillStyle = color;
+        ctx.fillRect(geometry.left + index * 24, legendY, 24, 7);
+      }
+      ctx.fillStyle = '#243b53';
+      ctx.fillText(`Отметки от ${low} до ${high} м`, geometry.left + 105, legendY + 7);
+      state.hitMap = {type: 'terrain', geometry};
+    }
+
+    function geophysicalColor(fraction) {
+      return `hsl(${232 - 212 * fraction}, 67%, ${42 + 11 * fraction}%)`;
+    }
+
+    function renderGeophysicalField() {
+      const {field, label, unit} = geophysicalChannels[state.mode];
+      const range = MAP_DATA.geophysics?.ranges[field];
+      if (!range) return;
+      const [low, high] = range;
+      const geometry = gridGeometry(dims.width_m, dims.height_m);
+      const size = geometry.cellSize * dims.cell_size_m;
+      for (const cell of cells) {
+        const fraction = high === low ? .5 : (cell.geophysical_fields[field] - low) / (high - low);
+        ctx.fillStyle = geophysicalColor(fraction);
+        ctx.fillRect(geometry.left + cell.x_index * size,
+                     geometry.top + (dims.height_cells - 1 - cell.y_index) * size, size + .3, size + .3);
+      }
+      drawGridFrame({...geometry, invertY: true}, `${label} · ${unit}`);
+      const legendY = geometry.top + geometry.gridHeight + 33;
+      for (let index = 0; index < 10; index++) {
+        ctx.fillStyle = geophysicalColor(index / 9);
+        ctx.fillRect(geometry.left + index * 10, legendY, 10, 7);
+      }
+      ctx.fillStyle = '#243b53';
+      ctx.fillText(`${low} … ${high} ${unit}`, geometry.left + 110, legendY + 7);
+      state.hitMap = {type: 'terrain', geometry};
     }
 
     function renderVertical(axis) {
@@ -589,7 +687,7 @@ HTML_TEMPLATE = r'''<!doctype html>
         maximumIndex,
         Math.floor(state.slicePositionM / dims.cell_size_m)
       );
-      const geometry = gridGeometry(columns, dims.depth_m);
+      const geometry = gridGeometry(columns, dims.depth_m - highestDepth);
       const sourceWidth = geometry.cellSize * dims.cell_size_m;
       for (let horizontal = 0; horizontal < sourceColumns; horizontal++) {
         const x = axis === 'x' ? sliceIndex : horizontal;
@@ -598,7 +696,7 @@ HTML_TEMPLATE = r'''<!doctype html>
         const sx = geometry.left + horizontal * dims.cell_size_m * geometry.cellSize;
         for (const interval of cell.intervals) {
           const rock = rockById[interval.rock_id];
-          const sy = geometry.top + interval.from_depth_m * geometry.cellSize;
+          const sy = geometry.top + (interval.from_depth_m - highestDepth) * geometry.cellSize;
           const intervalHeight = (
             interval.to_depth_m - interval.from_depth_m
           ) * geometry.cellSize;
@@ -607,7 +705,7 @@ HTML_TEMPLATE = r'''<!doctype html>
         }
         if (state.showDeposit) {
           for (const mineral of cell.mineralization) {
-            const sy = geometry.top + mineral.from_depth_m * geometry.cellSize;
+            const sy = geometry.top + (mineral.from_depth_m - highestDepth) * geometry.cellSize;
             const mineralHeight = (
               mineral.to_depth_m - mineral.from_depth_m
             ) * geometry.cellSize;
@@ -618,7 +716,7 @@ HTML_TEMPLATE = r'''<!doctype html>
         }
       }
       const coordinate = state.slicePositionM;
-      drawGridFrame(geometry, `Вертикальный разрез: ${axis.toUpperCase()} = ${coordinate} м`);
+      drawGridFrame({...geometry, elevationAxis: Boolean(terrain)}, `Вертикальный разрез: ${axis.toUpperCase()} = ${coordinate} м`);
       state.hitMap = {type: `vertical-${axis}`, geometry, axis, sliceIndex};
     }
 
@@ -673,7 +771,7 @@ HTML_TEMPLATE = r'''<!doctype html>
       ctx.textBaseline = 'middle';
       for (let y = labelStep; y < geometry.rows; y += labelStep) {
         ctx.fillText(
-          `${y} м`,
+          `${geometry.invertY ? geometry.rows - y : geometry.elevationAxis ? -highestDepth - y : y} м`,
           geometry.left - 8,
           geometry.top + y * geometry.cellSize
         );
@@ -689,9 +787,13 @@ HTML_TEMPLATE = r'''<!doctype html>
       document.getElementById('view3dControls').classList.toggle('hidden', !is3D);
       document.getElementById('depthControls').classList.toggle('hidden', !isHorizontal);
       document.getElementById('sliceControls').classList.toggle('hidden', !isVertical);
+      document.getElementById('truthMagneticOption').disabled = !MAP_DATA.geophysics;
+      document.getElementById('truthGammaOption').disabled = !MAP_DATA.geophysics;
+      depthSlider.min = String(highestDepth);
       depthSlider.max = String(dims.depth_m - 1);
       depthSlider.value = String(state.depthM);
-      depthValue.textContent = `${state.depthM} м`;
+      document.getElementById('depthLabel').textContent = terrain ? 'Отметка Z' : 'Глубина Z';
+      depthValue.textContent = `${terrain ? -state.depthM : state.depthM} м`;
       if (isVertical) {
         const axis = state.mode === 'vertical-x' ? 'X' : 'Y';
         const maximum = (axis === 'X' ? dims.width_m : dims.height_m) - 1;
@@ -703,13 +805,16 @@ HTML_TEMPLATE = r'''<!doctype html>
       }
       const titles = {
         '3d': 'Трёхмерная блочная модель',
+        'terrain': 'Рельеф и обнажения',
         'horizontal': 'Разрез по оси Z — плоскость X–Y',
         'vertical-x': 'Разрез по оси X — плоскость Y–Z',
         'vertical-y': 'Разрез по оси Y — плоскость X–Z'
       };
-      viewTitle.textContent = titles[state.mode];
+      viewTitle.textContent = titles[state.mode] || geophysicalChannels[state.mode]?.label;
       canvasHint.textContent = is3D
         ? 'Перетаскивайте мышью для вращения, колесом меняйте масштаб.'
+        : geophysicalChannels[state.mode] ? 'Выберите точку, чтобы увидеть истинные значения полей на поверхности.'
+        : state.mode === 'terrain' ? 'Выберите точку, чтобы увидеть отметку высоты и породу на поверхности.'
         : 'Выбор — 1 м; линии сетки — 10 м, усиленные линии — 50 м.';
       canvas.style.cursor = is3D ? 'grab' : 'crosshair';
       requestRender();
@@ -717,6 +822,11 @@ HTML_TEMPLATE = r'''<!doctype html>
 
     function showCellInfo(cell, depthM, pointX, pointY) {
       const interval = intervalAt(cell, depthM);
+      const elevation = cell.surface_elevation_m ?? 0;
+      if (!interval) {
+        cellInfo.textContent = `Точка выше поверхности. Отметка земли ${elevation} м.`;
+        return;
+      }
       const rock = rockById[interval.rock_id];
       const mineral = mineralizationAt(cell, depthM);
       const deposit = depositFor(mineral);
@@ -736,11 +846,13 @@ HTML_TEMPLATE = r'''<!doctype html>
         <div class="info-grid">
           <span>Точка 1 × 1 м</span><b>X ${pointX}-${Math.min(pointX + VIEW_STEP_M, dims.width_m)} / Y ${pointY}-${Math.min(pointY + VIEW_STEP_M, dims.height_m)} м</b>
           <span>Исходная ячейка</span><b>(${cell.x_index}, ${cell.y_index}), ${dims.cell_size_m} × ${dims.cell_size_m} м</b>
-          <span>Глубина</span><b>${Math.round(depthM)} м</b>
-          <span>Интервал</span><b>${interval.from_depth_m}-${interval.to_depth_m} м</b>
+          ${terrain ? `<span>Отметка поверхности</span><b>${elevation} м</b><span>Отметка Z</span><b>${Math.round(-depthM * 1000) / 1000} м</b>` : ''}
+          <span>Глубина от поверхности</span><b>${Math.round((depthM + elevation) * 1000) / 1000} м</b>
+          <span>Интервал от поверхности</span><b>${Math.round((interval.from_depth_m + elevation) * 1000) / 1000}–${Math.round((interval.to_depth_m + elevation) * 1000) / 1000} м</b>
           ${mineralRows}
           <span>Плотность</span><b>${interval.properties.density_g_cm3} г/см³</b>
           <span>Пористость</span><b>${interval.properties.porosity_percent} %</b>
+          ${cell.geophysical_fields ? `<span>Магнитная аномалия</span><b>${cell.geophysical_fields.magnetic_anomaly_nt} нТл</b><span>Гамма-фон</span><b>${cell.geophysical_fields.gamma_count_rate_cps} имп/с</b>` : ''}
         </div>`;
     }
 
@@ -761,7 +873,13 @@ HTML_TEMPLATE = r'''<!doctype html>
         showCellInfo(cell, state.hitMap.depthM, column, row);
         return;
       }
-      const depthM = Math.min(dims.depth_m - 1, row);
+      if (state.hitMap.type === 'terrain') {
+        const y = dims.height_m - 1 - row;
+        const cell = cellAt(Math.floor(column / dims.cell_size_m), Math.floor(y / dims.cell_size_m));
+        showCellInfo(cell, -(cell.surface_elevation_m ?? 0), column, y);
+        return;
+      }
+      const depthM = highestDepth + row;
       const horizontalIndex = Math.floor(column / dims.cell_size_m);
       const cell = state.hitMap.axis === 'x'
         ? cellAt(state.hitMap.sliceIndex, horizontalIndex)
@@ -867,12 +985,14 @@ HTML_TEMPLATE = r'''<!doctype html>
 '''
 
 
-def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[str, Any] | None = None) -> Path:
+def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[str, Any] | None = None,
+                 recognition: dict[str, Any] | None = None) -> Path:
     """Create an offline workspace with truth, expedition and recognition tabs."""
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     embedded = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     public_observations = json.dumps(observations, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
+    public_recognition = json.dumps(recognition, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
     replacements = {
         "__WORKSPACE_STYLES__": WORKSPACE_STYLES,
         "__WORKSPACE_TABS__": WORKSPACE_TABS,
@@ -881,7 +1001,8 @@ def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[s
     }
     html = re.sub("|".join(replacements), lambda match: replacements[match.group()], HTML_TEMPLATE)
     # Insert each JSON literal once; strings inside the payload are never templates.
-    data_replacements = {"__OBSERVATION_DATA__": public_observations, "__MAP_DATA__": embedded}
+    data_replacements = {"__OBSERVATION_DATA__": public_observations, "__RECOGNITION_DATA__": public_recognition,
+                         "__MAP_DATA__": embedded}
     html = re.sub("|".join(data_replacements), lambda match: data_replacements[match.group()], html)
     output_path.write_text(html, encoding="utf-8")
     return output_path

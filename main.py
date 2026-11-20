@@ -15,6 +15,8 @@ from geo_map import (
     build_viewer, generate_map, generate_observations, load_config,
     load_observation_config, save_map, save_observations,
 )
+from geo_map.recognition import recognize_deposits, save_recognition
+from geo_map.geophysics import add_geophysical_fields
 
 
 def parse_args() -> argparse.Namespace:
@@ -77,16 +79,25 @@ def main() -> None:
     if args.map is not None:
         with args.map.open(encoding="utf-8") as stream:
             data = json.load(stream)
-        if data.get("schema_version") != "2.0" or data.get("map_kind") != "synthetic_ground_truth":
-            raise ValueError("Ожидается истинная карта в формате 2.0")
+        if data.get("schema_version") not in {"2.0", "2.1", "2.2"} or data.get("map_kind") != "synthetic_ground_truth":
+            raise ValueError("Ожидается истинная карта в формате 2.0, 2.1 или 2.2")
+        mineral_catalog = json.loads(args.minerals.read_text(encoding="utf-8"))
+        rock_catalog = json.loads(args.rocks.read_text(encoding="utf-8"))
+        if "geophysics" not in data:
+            settings = json.loads(args.config.read_text(encoding="utf-8")).get("geophysics", {})
+            add_geophysical_fields(data, settings, rock_catalog["rocks"], mineral_catalog["minerals"])
     else:
         config = load_config(args.config, args.rocks, args.minerals)
         data = generate_map(config, seed=args.seed)
+        mineral_catalog = config
+        rock_catalog = config
     observation_config = load_observation_config(args.observations_config)
     observation_seed = secrets.randbits(63) if args.observation_seed is None else args.observation_seed
     observations = generate_observations(data, observation_config, seed=observation_seed)
+    recognition = recognize_deposits(observations, mineral_catalog, rock_catalog=rock_catalog)
     map_path = save_map(data, args.output / "map.json")
     observation_path = save_observations(observations, args.output / "observations")
+    recognition_path = save_recognition(recognition, args.output / "recognition.json")
     internal_directory = args.output / "internal"
     internal_directory.mkdir(parents=True, exist_ok=True)
     (internal_directory / "expedition_run.json").write_text(
@@ -94,7 +105,7 @@ def main() -> None:
                     "observation_config": observation_config}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    viewer_path = build_viewer(data, args.output / "map_view.html", observations=observations)
+    viewer_path = build_viewer(data, args.output / "map_view.html", observations=observations, recognition=recognition)
 
     dimensions = data["dimensions"]
     statistics = data["statistics"]
@@ -112,11 +123,20 @@ def main() -> None:
     print(f"Скважин в экспедиции: {observations['summary']['hole_count']}")
     print(f"Отобрано проб: {observations['summary']['sample_count']}")
     print(f"Почвенных проб: {observations['summary']['surface_sample_count']}")
+    print(f"Наблюдений обнажений: {observations['summary']['outcrop_count']}")
+    print(f"Точек съёмки рельефа: {observations['summary']['terrain_observation_count']}")
+    print(f"Точек геофизической съёмки: {observations['summary']['geophysical_observation_count']}")
     print(f"Траншей: {observations['summary']['trench_count']}")
     print(f"Наблюдений зон разломов: {observations['summary']['fault_observation_count']}")
     print(f"Контрольных проб: {observations['summary']['qc_sample_count']}")
     print(f"Наблюдения: {observation_path}")
     print(f"Файлы отдельных объектов: {observation_path.parent / 'objects' / 'index.json'}")
+    print(f"Минерализованных интервалов: {recognition['summary']['mineralized_intervals']}")
+    print(f"Почвенных аномалий: {recognition['summary']['soil_anomalies']}")
+    print(f"Целей с дополнительным признаком рельефа: {recognition['summary']['targets_supported_by_terrain']}")
+    print(f"Геофизических аномалий: {recognition['summary']['geophysical_anomaly_count']}")
+    print(f"Целей с поддержкой геофизики: {recognition['summary']['targets_supported_by_geophysics']}")
+    print(f"Результат поиска: {recognition_path}")
     print(f"Просмотр: {viewer_path}")
 
 

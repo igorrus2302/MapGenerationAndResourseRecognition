@@ -50,7 +50,7 @@ class GeneratorTests(unittest.TestCase):
         total_depth = self.generated["dimensions"]["depth_m"]
         for cell in self.generated["cells"]:
             intervals = cell["intervals"]
-            self.assertEqual(intervals[0]["from_depth_m"], 0)
+            self.assertEqual(intervals[0]["from_depth_m"], -cell["surface_elevation_m"])
             self.assertEqual(intervals[-1]["to_depth_m"], total_depth)
             for left, right in zip(intervals, intervals[1:]):
                 self.assertEqual(left["to_depth_m"], right["from_depth_m"])
@@ -78,6 +78,7 @@ class GeneratorTests(unittest.TestCase):
 
     def test_configured_layer_thickness_limits_are_preserved(self) -> None:
         config = deepcopy(self.config)
+        config["terrain"]["enabled"] = False
         config["deposit_generation"]["count"] = [0, 0]
         surface_low, surface_high = config["geology"]["surface_thickness_m"]
         minimum_thickness = config["geology"]["minimum_layer_thickness_m"]
@@ -94,6 +95,17 @@ class GeneratorTests(unittest.TestCase):
                         interval["to_depth_m"] - interval["from_depth_m"],
                         minimum_thickness,
                     )
+
+    def test_terrain_erodes_surface_cover_and_keeps_it_on_high_ground(self) -> None:
+        terrain = self.generated["terrain"]
+        cells = self.generated["cells"]
+        hills = max(cells, key=lambda cell: cell["surface_elevation_m"])
+        valley = min(cells, key=lambda cell: cell["surface_elevation_m"])
+        self.assertEqual((valley["surface_elevation_m"], hills["surface_elevation_m"]), (-55, 85))
+        cover = terrain["surface_cover_rock_id"]
+        self.assertEqual(hills["intervals"][0]["rock_id"], cover)
+        self.assertNotEqual(valley["intervals"][0]["rock_id"], cover)
+        self.assertEqual(terrain["exposed_cell_count"], sum(cell["intervals"][0]["rock_id"] != cover for cell in cells))
 
     def test_map_contains_mineralized_cells(self) -> None:
         count = sum(bool(cell["mineralization"]) for cell in self.generated["cells"])
@@ -387,21 +399,22 @@ class GeneratorTests(unittest.TestCase):
             html_path = build_viewer(self.generated, directory_path / "map_view.html")
             loaded = json.loads(json_path.read_text(encoding="utf-8"))
             html = html_path.read_text(encoding="utf-8")
-            self.assertEqual(loaded["schema_version"], "2.0")
+            self.assertEqual(loaded["schema_version"], "2.2")
             self.assertIn("faults", loaded)
             self.assertIn("Разрез по оси Z", html)
             self.assertIn("vertical-x", html)
             self.assertIn("const presentRocks", html)
             self.assertIn("Порода-носитель", html)
             self.assertIn("for (const interval of cell.intervals)", html)
-            self.assertIn("mineral.from_depth_m * geometry.cellSize", html)
+            self.assertIn("(mineral.from_depth_m - highestDepth) * geometry.cellSize", html)
             self.assertIn("slicePositionM", html)
-            self.assertIn("depthM: Math.min(5", html)
+            self.assertIn("depthM: Math.max(highestDepth", html)
             self.assertIn("const VIEW_STEP_M = 1", html)
             self.assertIn("Точка 1 × 1 м", html)
             self.assertIn("усиленные линии — 50 м", html)
             self.assertIn("mineral.grade_unit", html)
-            self.assertIn('"schema_version":"2.0"', html)
+            self.assertIn('"schema_version":"2.2"', html)
+            self.assertIn("Рельеф и обнажения", html)
             self.assertIn('"map_kind":"synthetic_ground_truth"', html)
 
 

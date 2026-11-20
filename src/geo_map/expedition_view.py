@@ -54,12 +54,9 @@ WORKSPACE_STYLES = r'''
     .method-notes { margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.65; }
     .method-notes summary { cursor: pointer; color: var(--navy); font-weight: 600; }
     .method-notes ul { padding-left: 20px; margin-bottom: 0; }
-    .empty-workspace { display: flex; align-items: center; justify-content: center; text-align: center; }
     .empty-card { width: min(540px, 100%); padding: 36px; background: white; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 12px 40px #102a4308; }
     .empty-card h2 { font-size: 24px; color: var(--navy); margin: 18px 0 10px; }
     .empty-card p { color: var(--muted); line-height: 1.7; }
-    .empty-icon { display: inline-grid; place-items: center; width: 70px; height: 70px; background: #eef5f9; color: var(--blue); border-radius: 18px; }
-    .empty-card button { width: auto; margin-top: 10px; }
     @media (max-width: 1000px) {
       .expedition-grid { grid-template-columns: 1fr; }
     }
@@ -72,7 +69,6 @@ WORKSPACE_STYLES = r'''
       .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .expedition-heading { align-items: flex-start; flex-direction: column; }
       .table-footer { align-items: flex-start; flex-direction: column; }
-      .empty-workspace { min-height: 70vh; }
     }
 '''
 
@@ -127,12 +123,24 @@ EXPEDITION_PANEL = r'''
       <details class="method-notes"><summary>План экспедиции и допущения модели</summary><div id="expeditionPlan"></div><ul id="expeditionNotes"></ul></details>
     </div>
   </section>
-  <section id="recognizedPanel" class="workspace-page empty-workspace hidden" role="tabpanel" aria-labelledby="tab-recognized">
-    <div class="empty-card">
-      <div class="empty-icon"><svg width="38" height="38" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="m5 12 15-7 15 7-15 8-15-8Zm0 9 15 8 15-8M5 30l15 7 15-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 3"/></svg></div>
-      <h2>Распознанная карта</h2><span class="status-pill">Следующий этап</span>
-      <p>Здесь появится карта, восстановленная по данным разведочной экспедиции. Алгоритм распознавания пока не реализован.</p>
-      <button class="primary-button" data-workspace="expedition">Открыть данные экспедиции</button>
+  <section id="recognizedPanel" class="workspace-page hidden" role="tabpanel" aria-labelledby="tab-recognized">
+    <div class="empty-card" id="recognitionEmpty"><h2>Поиск по наблюдениям</h2><p>Результаты поиска ещё не загружены.</p></div>
+    <div id="recognitionContent" class="hidden">
+      <div class="expedition-heading">
+        <div><h2>Результаты поиска</h2><p id="recognitionSummary"></p></div>
+        <button id="downloadRecognition" class="primary-button">Скачать результаты · JSON</button>
+      </div>
+      <div class="expedition-grid">
+        <div class="panel-card">
+          <div class="profile-heading"><h3>Карта наблюдений и целей поиска</h3><select id="recognitionAnalyte" aria-label="Компонент на карте поиска"><option value="">Все компоненты</option></select></div>
+          <svg id="recognitionMap" class="survey-map" viewBox="0 0 520 300" role="img" aria-label="План участка и положения выделенных целей"></svg>
+          <div class="muted">Синие линии — бурение и траншеи, серые точки — почвенные пробы, оранжевые метки — выделенные интервалы, зелёные — почвенные аномалии, фиолетовые — геофизические аномалии.</div>
+        </div>
+        <div class="panel-card">
+          <h3>Пробы и признаки</h3>
+          <div class="table-scroll"><table class="observation-table"><thead><tr><th scope="col">Источник</th><th scope="col">Глубина, м</th><th scope="col">Пик / порог</th><th scope="col">Поддержка</th></tr></thead><tbody id="recognitionTargets"></tbody></table></div>
+        </div>
+      </div>
     </div>
   </section>
 '''
@@ -153,7 +161,7 @@ WORKSPACE_SCRIPT = r'''
         if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
         document.getElementById('headerStats').innerHTML = name === 'truth' ? truthStats : name === 'expedition' && OBSERVATION_DATA
           ? `<span>${OBSERVATION_DATA.summary.hole_count} скважин</span><span>${OBSERVATION_DATA.summary.total_sample_count ?? OBSERVATION_DATA.summary.sample_count} полевых проб</span>`
-          : '<span>Восстановление по наблюдениям</span>';
+          : '<span>Поиск по наблюдениям</span>';
         if (name === 'truth') requestAnimationFrame(resizeCanvas);
       }
       for (const button of document.querySelectorAll('[data-workspace]')) button.addEventListener('click', () => activate(button.dataset.workspace));
@@ -282,6 +290,73 @@ WORKSPACE_SCRIPT = r'''
         const horizontal = hole.dip_deg === -90 ? 0 : distance * Math.cos(dip);
         return {x: hole.x_m + horizontal * Math.sin(azimuth), y: hole.y_m + horizontal * Math.cos(azimuth), depth: -distance * Math.sin(dip), horizontal};
       }
+      function renderRecognition(result) {
+        if (!result) return;
+        element('recognitionEmpty').classList.add('hidden');
+        element('recognitionContent').classList.remove('hidden');
+        const {targets, summary: searchSummary, campaign} = result;
+        const {width_m: width, height_m: height} = campaign;
+        const scale = Math.min(435 / width, 235 / height);
+        const left = (520 - width * scale) / 2, top = 20, bottom = top + height * scale;
+        const x = value => left + value * scale;
+        const y = value => bottom - value * scale;
+        const line = (a, b, color, thickness) => `<line x1="${x(a[0])}" y1="${y(a[1])}" x2="${x(b[0])}" y2="${y(b[1])}" stroke="${color}" stroke-width="${thickness}" stroke-linecap="round"/>`;
+        const dot = (a, color, size, title) => `<circle cx="${x(a[0])}" cy="${y(a[1])}" r="${size}" fill="${color}"><title>${escape(title)}</title></circle>`;
+        let plan = `<rect x="${left}" y="${top}" width="${width * scale}" height="${height * scale}" rx="4" fill="#f0f6f8" stroke="#b7ccd8"/>`;
+        plan += `<text x="${left}" y="${top - 6}" font-size="11" fill="#486581">Y · ${number(height)} м</text><text x="${x(width)}" y="${bottom + 18}" text-anchor="end" font-size="11" fill="#486581">X · ${number(width)} м</text>`;
+        for (const row of new Map((tables.surface_geochemistry || []).map(row => [row.sample_id, row])).values()) {
+          plan += dot([row.x_m, row.y_m], '#9caebc', 2, row.sample_id);
+        }
+        for (const hole of holes) {
+          const end = holePosition(hole, hole.total_depth_m);
+          plan += line([hole.x_m, hole.y_m], [end.x, end.y], '#76a8bd', 1.5) + dot([hole.x_m, hole.y_m], '#458eab', 3, hole.hole_id);
+        }
+        for (const trench of tables.trenches || []) {
+          plan += line([trench.start_x_m, trench.start_y_m], [trench.end_x_m, trench.end_y_m], '#458eab', 2);
+        }
+        for (const anomaly of result.geophysical_anomalies || []) {
+          const channel = geophysicalChannels[anomaly.method];
+          plan += dot([anomaly.x_m, anomaly.y_m], '#9354b5', 3, `${anomaly.observation_id} · ${channel.label} · ${number(anomaly.deviation)} ${channel.unit} от фона`);
+        }
+
+        element('recognitionSummary').textContent = targets.length
+          ? `Минерализованных интервалов — ${number(searchSummary.mineralized_intervals)} · почвенных аномалий — ${number(searchSummary.soil_anomalies)}`
+          : 'Ни один результат не прошёл поисковые пороги. Участок обследован по отдельным траекториям и точкам отбора проб.';
+        if (searchSummary.geophysical_anomaly_count) element('recognitionSummary').textContent += ` · Геофизических аномалий — ${number(searchSummary.geophysical_anomaly_count)}`;
+        const analyte = element('recognitionAnalyte');
+        analyte.innerHTML = '<option value="">Все компоненты</option>' + [...new Set(targets.map(target => target.analyte))].sort()
+          .map(name => `<option value="${escape(name)}">${escape(name)}</option>`).join('');
+        const signalNames = {
+          host_rock: 'Вмещающая порода', observed_fault: 'Разлом', steep_fault: 'Крутое падение разлома',
+          observed_contact: 'Контакт пород', intrusive_rock: 'Порода интрузии', compatible_core_properties: 'Плотность и пористость согласуются',
+          adjacent_positive_samples: 'Смежные пробы', nearby_soil_anomaly: 'Аномалия рядом',
+          terrain_bauxite_depression: 'Понижение над карбонатным контактом', terrain_exposed_host: 'Рядом выход подходящей породы',
+          geophysics_magnetic: 'Магнитное подтверждение', geophysics_gamma: 'Гамма-аномалия у поверхности'
+        };
+        function renderTargets() {
+          const shown = targets.filter(target => !analyte.value || target.analyte === analyte.value);
+          element('recognitionMap').innerHTML = plan + shown.map(target => {
+            const color = target.kind === 'soil_anomaly' ? '#168c86' : '#e95e2a';
+            const interval = target.start_xyz_m ? line(target.start_xyz_m, target.end_xyz_m, color, 4) : '';
+            return interval + dot(target.center_xyz_m, color, 5, `${target.analyte} · ${target.site_id}`);
+          }).join('');
+          element('recognitionTargets').innerHTML = shown.map(target => {
+            const depths = target.start_xyz_m ? `${number(target.start_xyz_m[2])}–${number(target.end_xyz_m[2])}` : '—';
+            const signals = target.supporting_signals.map(signal => signalNames[signal]);
+            if (target.geology?.core_properties?.conflicting_length_m > 0) signals.push('Есть расхождения со свойствами пород');
+            if (target.qc_warning_sample_ids.length || Object.keys(target.laboratory_alerts).length) signals.push('Есть замечания QA/QC');
+            const context = target.terrain_context;
+            const terrain = context ? `<div class="muted" data-terrain-observation="${escape(context.observation_id)}">Рельеф · ${escape(terrainTypes[context.terrain_type]?.label || context.terrain_type)} · ${escape(context.observation_id)}</div>` : '';
+            const outcrop = context?.outcrop ? `<div class="muted">Обнажение · ${escape(context.outcrop.observation_id)} · ${number(context.outcrop.distance_xy_m)} м</div>` : '';
+            const field = target.geophysical_evidence;
+            const geophysics = field ? `<div class="muted">Геофизика · ${escape(field.observation_id)} · ${number(field.distance_xy_m)} м</div>` : '';
+            return `<tr><td>${escape(target.site_id)} · ${escape(target.analyte)}</td><td>${depths}</td><td>${number(target.peak_result)} / ${number(target.threshold)} ${escape(target.unit)}</td><td>${signals.join(', ') || '—'}${terrain}${outcrop}${geophysics}</td></tr>`;
+          }).join('') || '<tr><td colspan="4">Нет целей по выбранным наблюдениям</td></tr>';
+        }
+        analyte.addEventListener('change', renderTargets);
+        element('downloadRecognition').addEventListener('click', () => download(JSON.stringify(result, null, 2), 'recognition.json', 'application/json'));
+        renderTargets();
+      }
       function drawTrajectory(hole) {
         const end = holePosition(hole, hole.total_depth_m);
         const scale = Math.min(480 / Math.max(1, end.horizontal), 135 / Math.max(1, end.depth));
@@ -392,6 +467,7 @@ WORKSPACE_SCRIPT = r'''
       element('observationNext').addEventListener('click', () => { page++; renderTable(); });
       drawSurvey(); drawProfile();
       __METHODS_SCRIPT__
+      renderRecognition(RECOGNITION_DATA);
     })(OBSERVATION_DATA);
 '''
 
