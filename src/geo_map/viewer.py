@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .expedition_view import WORKSPACE_PANELS, WORKSPACE_SCRIPT, WORKSPACE_STYLES, WORKSPACE_TABS
+from .geophysical_observations import GEOPHYSICAL_TABLES, LEGACY_GEOPHYSICAL_TABLE, split_legacy_geophysical_bundle
 from .observation_models import EXTRA_TABLE_FIELDS, prepare_preliminary_survey
 
 HTML_TEMPLATE = r'''<!doctype html>
@@ -994,17 +995,20 @@ def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[s
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     embedded = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    legacy_survey = observations is not None and LEGACY_GEOPHYSICAL_TABLE in observations["tables"]
+    if legacy_survey:
+        observations = split_legacy_geophysical_bundle(observations)
     public_observations = json.dumps(observations, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
     public_recognition = json.dumps(recognition, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
     if observation_config is None and observations is None:
         config_path = Path(__file__).resolve().parents[2] / "config/observations.json"
         observation_config = json.loads(config_path.read_text(encoding="utf-8"))
     preliminary_plan = None
-    if observation_config is not None:
+    if observation_config is not None and not legacy_survey:
         seed = data.get("seed", 0) if observation_seed is None else observation_seed
         preliminary_plan = prepare_preliminary_survey(data, observation_config, seed)
         preliminary_plan["table_fields"] = {
-            name: EXTRA_TABLE_FIELDS[name] for name in ("geophysical_observations", "terrain_observations", "outcrop_observations")
+            name: EXTRA_TABLE_FIELDS[name] for name in (*GEOPHYSICAL_TABLES.values(), "terrain_observations", "outcrop_observations")
         }
     embedded_plan = json.dumps(preliminary_plan, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
     replacements = {

@@ -130,8 +130,11 @@ assert.equal(get('geophysicalMap').innerHTML, '');
 assert.equal(get('terrainSurveyMap').innerHTML, '');
 assert.equal(get('outcropMap').innerHTML, '');
 const surveySettings = preliminaryPlan?.methods ?? observations?.plan?.methods ?? {};
-const hasMethod = key => Boolean(preliminaryPlan ? surveySettings[key] : surveySettings[key]?.enabled);
-const hasSurvey = ['geophysical_survey', 'terrain_survey', 'outcrops'].some(hasMethod);
+const geophysicalTables = ['magnetic_observations', 'gamma_observations'];
+const hasMethod = key => Boolean(preliminaryPlan ? surveySettings[key] :
+  geophysicalTables.includes(key) ? surveySettings.geophysical_survey?.enabled && observations.table_fields[key] :
+  surveySettings[key]?.enabled);
+const hasSurvey = [...geophysicalTables, 'terrain_survey', 'outcrops'].some(hasMethod);
 assert.equal(get('collectPreliminary').classList.contains('hidden'), !hasSurvey);
 if (hasSurvey) get('collectPreliminary').click();
 assert.equal(get('preliminaryEmpty').classList.contains('hidden'), hasSurvey);
@@ -144,7 +147,7 @@ assert.equal(get('expeditionPanel').classList.contains('hidden'), false);
 assert.equal(get('tab-expedition').attributes['aria-selected'], 'true');
 
 if (!observations) {
-  if (hasSurvey) assert.match(get('preliminaryTableBody').innerHTML, /(?:GEO|TER|OUT)-0001/);
+  if (hasSurvey) assert.match(get('preliminaryTableBody').innerHTML, /(?:MAG|GAM|TER|OUT)-0001/);
   assert.equal(get('expeditionEmpty').classList.contains('hidden'), false);
   assert.equal(get('expeditionContent').classList.contains('hidden'), true);
   get('tab-recognized').click();
@@ -204,12 +207,12 @@ if (!observations) {
   get('downloadObservationCsv').click();
   const hasOutcrops = hasMethod('outcrops');
   const hasTerrainSurvey = hasMethod('terrain_survey');
-  const hasGeophysics = hasMethod('geophysical_survey');
+  const geophysicalMethods = geophysicalTables.filter(hasMethod);
   const fieldMethods = get('expeditionSections').children.map(button => button.dataset.method);
   const surveyButtons = get('preliminarySections').children;
   assert.deepEqual(fieldMethods, ['boreholes', 'surface', 'trenches', 'structures', 'quality']);
   assert.deepEqual(surveyButtons.map(button => button.dataset.method),
-    [hasGeophysics && 'geophysical_survey', hasTerrainSurvey && 'terrain_survey', hasOutcrops && 'outcrops'].filter(Boolean));
+    [...geophysicalMethods, hasTerrainSurvey && 'terrain_survey', hasOutcrops && 'outcrops'].filter(Boolean));
   assert.equal(get('preliminaryEmpty').classList.contains('hidden'), surveyButtons.length > 0);
   assert.equal(get('preliminaryContent').classList.contains('hidden'), surveyButtons.length === 0);
   get('expeditionSections').children[1].click();
@@ -317,20 +320,22 @@ if (!observations) {
     assert.match(get('preliminaryTableHead').innerHTML, /Тип рельефа/);
     get('downloadPreliminaryGeoJson').click();
   }
-  const geophysicalDownload = blobs.length;
-  if (hasGeophysics) {
-    selectSurvey('geophysical_survey');
+  const geophysicalDownloads = [];
+  for (const table of geophysicalMethods) {
+    selectSurvey(table);
     assert.equal(get('geophysicalOverview').classList.contains('hidden'), false);
-    const field = observations.tables.geophysical_observations;
+    const field = observations.tables[table];
     assert.equal((get('geophysicalMap').innerHTML.match(/<circle/g) || []).length, field.length);
-    get('geophysicalChannel').value = 'gamma';
-    get('geophysicalChannel').fire('change');
     assert.ok(!get('geophysicalMap').innerHTML.includes('NaN'));
-    if (field.length) assert.match(get('geophysicalMap').innerHTML, /имп\/с/);
+    const magnetic = table === 'magnetic_observations';
+    if (field.length) assert.match(get('geophysicalMap').innerHTML, magnetic ? /нТл/ : /имп\/с/);
+    assert.match(get('preliminaryTableHead').innerHTML, magnetic ? /magnetic_anomaly_nt/ : /gamma_count_rate_cps/);
+    assert.doesNotMatch(get('preliminaryTableHead').innerHTML, magnetic ? /gamma_count_rate_cps/ : /magnetic_anomaly_nt/);
     if (field.length > 50) {
       get('preliminaryNext').click();
       assert.match(get('preliminaryPageInfo').textContent, /^51/);
     }
+    geophysicalDownloads.push({table, index: blobs.length, magnetic});
     get('downloadPreliminaryGeoJson').click();
     get('downloadPreliminaryCsv').click();
   }
@@ -352,14 +357,16 @@ if (!observations) {
     for (const [enabled, index, table] of [
       [hasOutcrops, outcropDownload, 'outcrop_observations'],
       [hasTerrainSurvey, terrainDownload, 'terrain_observations'],
-      [hasGeophysics, geophysicalDownload, 'geophysical_observations'],
     ]) {
       if (enabled) assert.deepEqual(JSON.parse(values[index]), JSON.parse(JSON.stringify(observations.geojson[table])));
     }
-    if (hasGeophysics) {
-      const surveyCsv = values[geophysicalDownload + 1];
-      assert.match(surveyCsv, /"magnetic_anomaly_nt".*"gamma_count_rate_cps"/);
-      assert.equal(surveyCsv.split('\r\n').length, observations.tables.geophysical_observations.length + 2);
+    for (const {table, index, magnetic} of geophysicalDownloads) {
+      assert.deepEqual(JSON.parse(values[index]), JSON.parse(JSON.stringify(observations.geojson[table])));
+      const surveyCsv = values[index + 1];
+      const header = surveyCsv.split('\r\n')[0];
+      assert.match(header, magnetic ? /"magnetic_anomaly_nt"/ : /"gamma_count_rate_cps"/);
+      assert.doesNotMatch(header, magnetic ? /"gamma_count_rate_cps"/ : /"magnetic_anomaly_nt"/);
+      assert.equal(surveyCsv.split('\r\n').length, observations.tables[table].length + 2);
     }
     for (const {source, index} of sourceDownloads) {
       const pack = JSON.parse(values[index]);

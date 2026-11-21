@@ -13,6 +13,7 @@ from typing import Any
 
 from .boreholes import collar_bounds, orientation, validate_trajectory
 from .drilling_plan import DEFAULT_RANDOM_FRACTION, target_boreholes
+from .geophysical_observations import GEOPHYSICAL_DIRECTORIES, GEOPHYSICAL_TABLES, LEGACY_GEOPHYSICAL_TABLE, split_legacy_geophysical_bundle
 from .observation_tools import TruthSampler, _number, _rng, measure_grade
 from .observation_models import EXTRA_TABLE_FIELDS, extend_campaign, survey_preliminary, validate_extensions
 from .observation_objects import save_observation_objects
@@ -34,7 +35,7 @@ SUMMARY_FOLDERS = {
     "surface_geochemistry": "surface_geochemistry",
     "outcrop_observations": "outcrops",
     "terrain_observations": "terrain",
-    "geophysical_observations": "geophysics",
+    **GEOPHYSICAL_DIRECTORIES,
     "quality_control": "quality_control",
 }
 
@@ -104,7 +105,7 @@ def _validate_config(config: dict[str, Any], dimensions: dict[str, Any]) -> None
 
 
 def _plan_holes(dimensions: dict[str, Any], drilling: dict[str, Any], seed: int, *,
-                geophysical_rows: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+                geophysical_channels: dict[str, list[dict[str, Any]]] | None = None) -> list[dict[str, Any]]:
     defaults = orientation(drilling)
     layout = drilling.get("layout", "grid")
     if layout == "manual":
@@ -135,8 +136,8 @@ def _plan_holes(dimensions: dict[str, Any], drilling: dict[str, Any], seed: int,
             fy = ((index // columns) + 0.5) / rows
         holes.append({"hole_id": f"BH-{index + 1:03d}", "x_m": xmin + fx * (xmax - xmin),
                       "y_m": ymin + fy * (ymax - ymin), "depth_m": drilling["depth_m"], **angles[index % len(angles)]})
-    if layout == "hybrid" and geophysical_rows:
-        target_boreholes(holes, bounds, dimensions, geophysical_rows,
+    if layout == "hybrid" and geophysical_channels:
+        target_boreholes(holes, bounds, dimensions, geophysical_channels,
                          drilling.get("random_fraction", DEFAULT_RANDOM_FRACTION))
     return holes
 
@@ -169,7 +170,8 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
 
     survey_preliminary(truth_map, config, seed, sampler, append)
     drilling = config["drilling"]
-    holes = _plan_holes(dimensions, drilling, seed, geophysical_rows=tables["geophysical_observations"])
+    geophysical_channels = {method: tables[table] for method, table in GEOPHYSICAL_TABLES.items()}
+    holes = _plan_holes(dimensions, drilling, seed, geophysical_channels=geophysical_channels)
     step = drilling["sample_length_m"]
     for hole in holes:
         hole_id, x, y, depth = hole["hole_id"], hole["x_m"], hole["y_m"], hole["depth_m"]
@@ -246,7 +248,7 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
     extra = extend_campaign(truth_map, config, seed, holes, source_samples, tables, append)
     observed_ids = {item["observed_rock_id"] for name in ("borehole_lithology", "trench_intervals", "outcrop_observations") for item in tables[name]}
     bundle = {
-        "schema_version": "1.6", "data_kind": "exploration_observations",
+        "schema_version": "1.7", "data_kind": "exploration_observations",
         "campaign": {"campaign_id": campaign_id, "title": config["title"], "date": logged_date,
                      "coordinate_system": "local_cartesian", "width_m": dimensions["width_m"], "height_m": dimensions["height_m"]},
         "plan": {"layout": config["drilling"].get("layout", "grid"), "sample_length_m": step,
@@ -310,6 +312,7 @@ def _save_bundle(bundle: dict[str, Any], directory: str | Path, *, group_tables:
 
 def save_observations(bundle: dict[str, Any], directory: str | Path) -> Path:
     """Export the campaign, drilling sources and individual observation objects."""
+    bundle = split_legacy_geophysical_bundle(bundle)
     output = _save_bundle(bundle, directory, group_tables=True)
     sources = describe_borehole_sources(bundle)
     (Path(directory) / "borehole_sources.json").write_text(
@@ -325,4 +328,8 @@ def save_observations(bundle: dict[str, Any], directory: str | Path) -> Path:
             old_file = output.parent / f"{name}.{extension}"
             if old_file.is_file():
                 old_file.unlink()
+    if set(GEOPHYSICAL_TABLES.values()) <= bundle["table_fields"].keys():
+        for folder in (output.parent, output.parent / "tables/geophysics"):
+            for extension in ("csv", "geojson"):
+                (folder / f"{LEGACY_GEOPHYSICAL_TABLE}.{extension}").unlink(missing_ok=True)
     return output

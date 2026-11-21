@@ -191,7 +191,7 @@ class ObservationTests(unittest.TestCase):
             self.assertEqual(json.loads(path.read_text()), bundle)
             tables_dir = Path(directory) / "tables"
             for name, rows in bundle["tables"].items():
-                csv_file, = tables_dir.glob(f"*/{name}.csv")
+                csv_file, = tables_dir.rglob(f"{name}.csv")
                 with csv_file.open(encoding="utf-8", newline="") as stream:
                     reader = csv.DictReader(stream)
                     exported = list(reader)

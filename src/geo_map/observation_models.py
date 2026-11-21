@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from .boreholes import direction as borehole_direction
 from .generator import _fault_signed_distance_m
+from .geophysical_observations import GEOPHYSICAL_PREFIXES, GEOPHYSICAL_TABLE_FIELDS, GEOPHYSICAL_TABLES, point_geojson
 from .geophysics import CHANNELS
 from .observation_tools import TruthSampler, _number, _rng, measure_grade, surface_grid_shape
 
@@ -17,7 +18,7 @@ EXTRA_TABLE_FIELDS = {
     "surface_geochemistry": "campaign_id sample_id x_m y_m sample_date sample_material sampling_depth_from_m sampling_depth_to_m sampling_method analyte result_value result_qualifier unit detection_limit analysis_method laboratory certificate_id position_uncertainty_m qc_type parent_sample_id qc_flag notes".split(),
     "outcrop_observations": "campaign_id observation_id x_m y_m surface_elevation_m observed_rock_id observed_rock_name observation_method position_uncertainty_m survey_date".split(),
     "terrain_observations": "campaign_id observation_id x_m y_m surface_elevation_m elevation_uncertainty_m slope_deg local_relief_m terrain_type observation_method survey_date".split(),
-    "geophysical_observations": "campaign_id observation_id x_m y_m surface_elevation_m magnetic_anomaly_nt magnetic_sigma_nt gamma_count_rate_cps gamma_sigma_cps position_uncertainty_m observation_method survey_date".split(),
+    **GEOPHYSICAL_TABLE_FIELDS,
     "trenches": "campaign_id trench_id start_x_m start_y_m end_x_m end_y_m depth_m width_m surveyed_length_m position_uncertainty_m trench_status survey_date".split(),
     "trench_intervals": "campaign_id trench_id interval_id from_m to_m observed_rock_id observed_rock_name sample_material description confidence".split(),
     "trench_samples": "campaign_id trench_id sample_id from_m to_m sampling_depth_from_m sampling_depth_to_m sample_material sampling_method analyte result_value result_qualifier unit detection_limit analysis_method laboratory certificate_id qc_type qc_flag".split(),
@@ -346,15 +347,19 @@ def prepare_preliminary_survey(truth: dict[str, Any], config: dict[str, Any], se
     if _enabled(config, "geophysical_survey") and "geophysics" in truth:
         settings = config["geophysical_survey"]
         position_sigma = 0 if ideal else settings.get("position_sigma_m", 0)
-        uncertainties = {sigma: 0 if ideal else settings.get(sigma, 0) for _, sigma in CHANNELS.values()}
-        points = _survey_positions(dimensions, {"point_count": settings["point_count"]}, seed, "GEO",
-                                   "geophysics-position", position_sigma)
-        for point in points:
-            point["field_errors"] = {
-                field: _rng(seed, "geophysics", point["observation_id"], method).gauss(0, uncertainties[sigma])
-                for method, (field, sigma) in CHANNELS.items()
-            }
-        methods["geophysical_survey"] = {"points": points, "position_uncertainty_m": position_sigma, **uncertainties}
+        stations = _survey_positions(dimensions, {"point_count": settings["point_count"]}, seed, "GEO",
+                                     "geophysics-position", position_sigma)
+        for method, (field, sigma_field) in CHANNELS.items():
+            table = GEOPHYSICAL_TABLES[method]
+            sigma = 0 if ideal else settings.get(sigma_field, 0)
+            points = [
+                {**station, "station_id": station["observation_id"],
+                 "observation_id": f"{GEOPHYSICAL_PREFIXES[method]}-{index:04d}",
+                 "field_error": _rng(seed, "geophysics", station["observation_id"], method).gauss(0, sigma)}
+                for index, station in enumerate(stations, 1)
+            ]
+            methods[table] = {"points": points, "field": field, "sigma_field": sigma_field,
+                              "sigma": sigma, "position_uncertainty_m": position_sigma}
     if _enabled(config, "terrain_survey"):
         settings = {**TERRAIN_SURVEY_DEFAULTS, **config["terrain_survey"]}
         count = settings["point_count"]
@@ -460,26 +465,28 @@ def _terrain_observations(plan: dict[str, Any], sampler: TruthSampler, append: C
 
 
 def _geophysical_observations(plan: dict[str, Any], sampler: TruthSampler, append: Callable) -> None:
-    settings = plan["methods"]["geophysical_survey"]
-    for point in settings["points"]:
-        cell = sampler.column(*point["position"])
-        measurements = {}
-        for method, (field, sigma) in CHANNELS.items():
-            measured = cell["geophysical_fields"][field] + point["field_errors"][field]
-            measurements[field] = round(max(0, measured) if method == "gamma" else measured, 4)
-            measurements[sigma] = settings[sigma]
-        append("geophysical_observations", observation_id=point["observation_id"], x_m=point["x_m"], y_m=point["y_m"],
-               surface_elevation_m=cell.get("surface_elevation_m", 0), **measurements,
-               position_uncertainty_m=settings["position_uncertainty_m"],
-               observation_method="ground_geophysical_survey", survey_date=plan["date"])
+    for method, table in GEOPHYSICAL_TABLES.items():
+        if table not in plan["methods"]:
+            continue
+        settings = plan["methods"][table]
+        field, sigma_field = settings["field"], settings["sigma_field"]
+        for point in settings["points"]:
+            cell = sampler.column(*point["position"])
+            measured = cell["geophysical_fields"][field] + point["field_error"]
+            if method == "gamma":
+                measured = max(0, measured)
+            append(table, observation_id=point["observation_id"], station_id=point["station_id"],
+                   x_m=point["x_m"], y_m=point["y_m"], surface_elevation_m=cell.get("surface_elevation_m", 0),
+                   position_uncertainty_m=settings["position_uncertainty_m"],
+                   observation_method="ground_geophysical_survey", survey_date=plan["date"],
+                   **{field: round(measured, 4), sigma_field: settings["sigma"]})
 
 
 def survey_preliminary(truth: dict[str, Any], config: dict[str, Any], seed: int,
                        sampler: TruthSampler, append: Callable) -> None:
     """Collect surface survey records before planning the field expedition."""
     plan = prepare_preliminary_survey(truth, config, seed)
-    if "geophysical_survey" in plan["methods"]:
-        _geophysical_observations(plan, sampler, append)
+    _geophysical_observations(plan, sampler, append)
     if "terrain_survey" in plan["methods"]:
         _terrain_observations(plan, sampler, append)
     if "outcrops" in plan["methods"]:
@@ -672,10 +679,8 @@ def _geojson(tables: dict[str, Any], dimensions: dict[str, Any]) -> dict[str, An
         trenches["features"].append({"type": "Feature", "id": row["trench_id"], "geometry": {"type": "LineString", "coordinates": [
             [row["start_x_m"], row["start_y_m"]], [row["end_x_m"], row["end_y_m"]]]}, "properties": dict(row)})
     layers = {"surface_geochemistry": surface, "trench_paths": trenches}
-    for name in ("outcrop_observations", "terrain_observations", "geophysical_observations"):
-        features = [{"type": "Feature", "id": row["observation_id"], "geometry": {"type": "Point", "coordinates": [row["x_m"], row["y_m"]]},
-                     "properties": {key: value for key, value in row.items() if key not in {"x_m", "y_m"}}} for row in tables[name]]
-        layers[name] = {**common, "name": name, "features": features}
+    for name in ("outcrop_observations", "terrain_observations", *GEOPHYSICAL_TABLES.values()):
+        layers[name] = point_geojson(name, tables[name], dimensions)
     return layers
 
 
@@ -694,7 +699,8 @@ def extend_campaign(truth: dict[str, Any], config: dict[str, Any], seed: int, ho
                "surface_unavailable_count": unavailable_soil,
                "outcrop_count": len(tables["outcrop_observations"]),
                "terrain_observation_count": len(tables["terrain_observations"]),
-               "geophysical_observation_count": len(tables["geophysical_observations"]),
+               "geophysical_observation_count": len({row["station_id"] for table in GEOPHYSICAL_TABLES.values() for row in tables[table]}),
+               **{f"{method}_observation_count": len(tables[table]) for method, table in GEOPHYSICAL_TABLES.items()},
                "trench_count": len(tables["trenches"]), "trench_sample_count": sum(item["source"] == "trench" for item in sources.values()),
                "trench_missing_sample_count": missing_trench_samples,
                "fault_observation_count": len(tables["fault_intersections"]),

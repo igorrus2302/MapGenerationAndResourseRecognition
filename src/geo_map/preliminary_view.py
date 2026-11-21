@@ -2,7 +2,7 @@
 
 PRELIMINARY_SCRIPT = r'''
       Object.assign(fieldNames, {
-        survey_date: 'Дата съёмки', surface_elevation_m: 'Отметка поверхности, м',
+        survey_date: 'Дата съёмки', surface_elevation_m: 'Отметка поверхности, м', station_id: 'Станция съёмки',
         elevation_uncertainty_m: 'Погрешность высоты, м', slope_deg: 'Уклон, °',
         local_relief_m: 'Относительная высота, м', terrain_type: 'Тип рельефа',
         magnetic_anomaly_nt: 'Магнитная аномалия, нТл', magnetic_sigma_nt: 'Погрешность магнитного канала, нТл',
@@ -13,6 +13,7 @@ PRELIMINARY_SCRIPT = r'''
         ground_geophysical_survey: 'Наземная геофизическая съёмка'
       });
       for (const [code, type] of Object.entries(terrainTypes)) categoryNames[code] = type.label;
+      const surveyChannels = {magnetic_observations: 'magnetic', gamma_observations: 'gamma'};
 
       function roundMeasurement(value, decimals) {
         // Follow Python's ties-to-even rule for exactly representable halfway values.
@@ -26,7 +27,7 @@ PRELIMINARY_SCRIPT = r'''
 
       function collectSurvey(plan) {
         const result = {};
-        const {geophysical_survey: geophysics, terrain_survey: terrainSurvey, outcrops} = plan.methods;
+        const {terrain_survey: terrainSurvey, outcrops} = plan.methods;
         const exactCells = new Map(cells.map(cell => [cell.y_index * dims.width_cells + cell.x_index, cell]));
         const sampled = point => {
           const [x, y] = point.position.map(coordinate => Math.floor(coordinate / dims.cell_size_m));
@@ -37,16 +38,17 @@ PRELIMINARY_SCRIPT = r'''
           campaign_id: plan.campaign_id, observation_id: point.observation_id, x_m: point.x_m, y_m: point.y_m,
           observation_method: method, survey_date: plan.date
         });
-        if (geophysics) {
-          result.geophysical_observations = geophysics.points.map(point => {
+        for (const [table, method] of Object.entries(surveyChannels)) {
+          const settings = plan.methods[table];
+          if (!settings) continue;
+          const {field, sigma_field: sigmaField, sigma, position_uncertainty_m: positionSigma} = settings;
+          result[table] = settings.points.map(point => {
             const cell = sampled(point);
-            const read = field => cell.geophysical_fields[field] + point.field_errors[field];
+            const value = cell.geophysical_fields[field] + point.field_error;
             return {
-              ...record(point, 'ground_geophysical_survey'), surface_elevation_m: elevation(cell),
-              magnetic_anomaly_nt: roundMeasurement(read('magnetic_anomaly_nt'), 4),
-              magnetic_sigma_nt: geophysics.magnetic_sigma_nt,
-              gamma_count_rate_cps: roundMeasurement(Math.max(0, read('gamma_count_rate_cps')), 4),
-              gamma_sigma_cps: geophysics.gamma_sigma_cps, position_uncertainty_m: geophysics.position_uncertainty_m
+              ...record(point, 'ground_geophysical_survey'), station_id: point.station_id,
+              surface_elevation_m: elevation(cell), [field]: roundMeasurement(method === 'gamma' ? Math.max(0, value) : value, 4),
+              [sigmaField]: sigma, position_uncertainty_m: positionSigma
             };
           });
         }
@@ -132,7 +134,8 @@ PRELIMINARY_SCRIPT = r'''
           element('terrainSurveyLegend').innerHTML = Object.values(terrainTypes).filter(type => counts.has(type.label))
             .map(type => `<span style="color:${type.color}">● ${type.label} · ${number(counts.get(type.label))}</span>`).join(' &nbsp; ');
         } else {
-          const {field, label, unit} = geophysicalChannels[element('geophysicalChannel').value];
+          const {field, label, unit} = geophysicalChannels[surveyChannels[method]];
+          element('geophysicalHeading').textContent = label;
           const values = rows.map(row => row[field]);
           const minimum = Math.min(...values), maximum = Math.max(...values);
           element('geophysicalMap').innerHTML = markup + rows.map(row => {
@@ -142,7 +145,7 @@ PRELIMINARY_SCRIPT = r'''
           }).join('');
           element('geophysicalCaption').textContent = rows.length
             ? `${number(rows.length)} точек · от ${number(minimum)} ${unit} (синий) до ${number(maximum)} ${unit} (оранжевый)`
-            : 'Измерения магнитного поля и гамма-фона отсутствуют.';
+            : 'Для этого канала пока нет измерений.';
         }
       }
 
@@ -151,12 +154,15 @@ PRELIMINARY_SCRIPT = r'''
         const settings = plan?.methods ?? observations?.plan?.methods ?? {};
         const tableFields = plan?.table_fields ?? observations?.table_fields ?? {};
         const definitions = {
-          geophysical_survey: {label: 'Геофизика', panel: 'geophysicalOverview', table: 'geophysical_observations', title: 'Точки геофизической съёмки'},
+          magnetic_observations: {label: 'Магнитное поле', panel: 'geophysicalOverview', table: 'magnetic_observations',
+            title: 'Магнитные наблюдения', archiveSetting: 'geophysical_survey'},
+          gamma_observations: {label: 'Гамма-фон', panel: 'geophysicalOverview', table: 'gamma_observations',
+            title: 'Радиометрические наблюдения', archiveSetting: 'geophysical_survey'},
           terrain_survey: {label: 'Рельеф', panel: 'terrainSurveyOverview', table: 'terrain_observations', title: 'Точки съёмки рельефа'},
           outcrops: {label: 'Обнажения', panel: 'outcropOverview', table: 'outcrop_observations', title: 'Наблюдения обнажений'}
         };
-        const methods = Object.fromEntries(Object.entries(definitions).filter(([key, {table}]) =>
-          (plan ? settings[key] : settings[key]?.enabled) && tableFields[table]));
+        const methods = Object.fromEntries(Object.entries(definitions).filter(([key, {table, archiveSetting}]) =>
+          (plan ? settings[key] : settings[archiveSetting ?? key]?.enabled) && tableFields[table]));
         const keys = Object.keys(methods);
         const start = element('collectPreliminary');
         const status = element('preliminaryStatus');
@@ -185,13 +191,13 @@ PRELIMINARY_SCRIPT = r'''
                                          page, 'Для этого раздела пока нет наблюдений');
           }
           function renderMap() {
-            drawPreliminaryMap(active, activeRows(), settings[active]);
+            drawPreliminaryMap(active, activeRows(), settings[active] ?? settings[methods[active].archiveSetting]);
           }
           function activate(key) {
             active = key;
             page = 0;
             for (const [name, method] of Object.entries(methods)) {
-              element(method.panel).classList.toggle('hidden', name !== key);
+              element(method.panel).classList.toggle('hidden', method.panel !== methods[key].panel);
               buttons[name].setAttribute('aria-pressed', String(name === key));
             }
             element('preliminaryDataTitle').textContent = methods[key].title;
@@ -209,7 +215,6 @@ PRELIMINARY_SCRIPT = r'''
           });
           element('preliminaryPrevious').addEventListener('click', () => { page--; renderTable(); });
           element('preliminaryNext').addEventListener('click', () => { page++; renderTable(); });
-          element('geophysicalChannel').addEventListener('change', () => { if (active === 'geophysical_survey') renderMap(); });
           activate(keys[0]);
           element('preliminaryEmpty').classList.add('hidden');
           element('preliminaryContent').classList.remove('hidden');

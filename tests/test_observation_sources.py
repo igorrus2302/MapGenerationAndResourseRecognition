@@ -58,7 +58,7 @@ class BoreholeSourceTests(unittest.TestCase):
             save_observations(self.bundle, directory)
             manifest = json.loads((directory / "borehole_sources.json").read_text())
             self.assertEqual(manifest["borehole_sources"], self.bundle["borehole_sources"])
-            self.assertEqual(len(list((directory / "tables").glob("*/*.csv"))), len(self.bundle["table_fields"]))
+            self.assertEqual(len(list((directory / "tables").rglob("*.csv"))), len(self.bundle["table_fields"]))
             self.assertEqual(list(directory.glob("*.csv")), [])
             for source in manifest["borehole_sources"]:
                 folder = directory / source["directory"]

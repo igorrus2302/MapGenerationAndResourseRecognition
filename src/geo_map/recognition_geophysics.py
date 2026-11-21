@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from statistics import median
 
+from .geophysical_observations import geophysical_rows
 from .geophysics import CHANNELS
 from .recognition_spatial import index_points, nearest_point, survey_radius
 
@@ -15,11 +16,11 @@ FLOOR_DEVIATION = {"magnetic": 8, "gamma": 4}
 MIN_MEASUREMENTS = 8
 
 
-def detect_geophysical_anomalies(rows, *, spread_multiplier=3.5, uncertainty_multiplier=3):
+def detect_geophysical_anomalies(channels, *, spread_multiplier=3.5, uncertainty_multiplier=3):
     """Estimate channel backgrounds and detect deviations in measured survey rows."""
     anomalies, backgrounds = [], []
     for method, (field, sigma_field) in CHANNELS.items():
-        usable = [row for row in rows if row.get(field) is not None]
+        usable = [row for row in channels.get(method, ()) if row.get(field) is not None]
         stats = {"method": method, "unit": UNITS[method], "measurement_count": len(usable),
                  "status": "insufficient_measurements"}
         backgrounds.append(stats)
@@ -28,12 +29,12 @@ def detect_geophysical_anomalies(rows, *, spread_multiplier=3.5, uncertainty_mul
         background = median(row[field] for row in usable)
         mad = median(abs(row[field] - background) for row in usable)
         threshold = max(spread_multiplier * 1.4826 * mad,
-                        uncertainty_multiplier * median(row.get(sigma_field, 0) for row in usable),
+                        uncertainty_multiplier * median(row.get(sigma_field) or 0 for row in usable),
                         FLOOR_DEVIATION[method])
         stats.update(status="estimated", median=background, mad=mad, deviation_threshold=threshold)
         for row in usable:
             delta = row[field] - background
-            required = max(threshold, uncertainty_multiplier * row.get(sigma_field, 0))
+            required = max(threshold, uncertainty_multiplier * (row.get(sigma_field) or 0))
             if (abs(delta) if method == "magnetic" else delta) < required:
                 continue
             anomalies.append({"observation_id": row["observation_id"], "method": method, "unit": UNITS[method],
@@ -45,21 +46,24 @@ def detect_geophysical_anomalies(rows, *, spread_multiplier=3.5, uncertainty_mul
 
 class GeophysicalEvidence:
     def __init__(self, observations):
-        rows = observations["tables"].get("geophysical_observations", ())
+        channels = {method: geophysical_rows(observations["tables"], method) for method in CHANNELS}
         self.anomalies = []
         self.backgrounds = []
         self.radius_m = None
+        self.radii_m = {}
         self.grids = {}
-        if not rows:
+        if not any(channels.values()):
             return
-        plan = observations.get("plan", {}).get("methods", {}).get("geophysical_survey", {})
-        self.radius_m = survey_radius(observations["campaign"], plan.get("point_count", len(rows)))
-        self.anomalies, self.backgrounds = detect_geophysical_anomalies(rows)
+        for method, rows in channels.items():
+            if rows:
+                self.radii_m[method] = survey_radius(observations["campaign"], len(rows))
+        self.radius_m = max(self.radii_m.values())
+        self.anomalies, self.backgrounds = detect_geophysical_anomalies(channels)
         for stats in self.backgrounds:
             if stats["status"] == "estimated":
                 method = stats["method"]
                 self.grids[method] = index_points((row for row in self.anomalies if row["method"] == method),
-                                                  self.radius_m)
+                                                  self.radii_m[method])
 
     def annotate(self, target):
         rule = METHOD_RULES.get(target.get("mineral_id"))
@@ -70,7 +74,7 @@ class GeophysicalEvidence:
             return
         # Gamma sees the top of the interval, whereas magnetic support is evaluated at its center.
         x, y, depth = target["start_xyz_m" if method == "gamma" else "center_xyz_m"]
-        result = nearest_point(self.grids[method], (x, y), self.radius_m, lambda row: row["deviation"] > 0)
+        result = nearest_point(self.grids[method], (x, y), self.radii_m[method], lambda row: row["deviation"] > 0)
         if not result:
             return
         distance, anomaly = result

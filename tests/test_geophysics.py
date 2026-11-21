@@ -9,6 +9,7 @@ from pathlib import Path
 
 from test_observations import ROOT, campaign_config, small_map
 from geo_map.boreholes import validate_trajectory
+from geo_map.geophysical_observations import GEOPHYSICAL_DIRECTORIES, GEOPHYSICAL_PREFIXES, GEOPHYSICAL_TABLES, load_geophysical_csv
 from geo_map.geophysics import add_geophysical_fields
 from geo_map.observations import generate_observations, save_observations
 from geo_map.recognition import recognize_deposits
@@ -57,23 +58,39 @@ class GeophysicsTests(unittest.TestCase):
     def test_survey_measures_and_exports_without_truth_parameters(self):
         truth = self.truth()
         bundle = generate_observations(truth, self.config, seed=1)
-        rows = bundle["tables"]["geophysical_observations"]
-        self.assertEqual(len(rows), 12)
-        self.assertEqual(rows[0]["magnetic_anomaly_nt"], truth["cells"][0]["geophysical_fields"]["magnetic_anomaly_nt"])
-        self.assertEqual(rows[0]["magnetic_sigma_nt"], 0)
+        magnetic, gamma = (bundle["tables"][table] for table in GEOPHYSICAL_TABLES.values())
+        self.assertEqual(len(magnetic), 12)
+        self.assertEqual(len(gamma), 12)
+        self.assertEqual(magnetic[0]["station_id"], gamma[0]["station_id"])
+        self.assertNotEqual(magnetic[0]["observation_id"], gamma[0]["observation_id"])
+        self.assertNotIn("gamma_count_rate_cps", magnetic[0])
+        self.assertNotIn("magnetic_anomaly_nt", gamma[0])
+        self.assertEqual(magnetic[0]["magnetic_anomaly_nt"], truth["cells"][0]["geophysical_fields"]["magnetic_anomaly_nt"])
+        self.assertEqual(magnetic[0]["magnetic_sigma_nt"], 0)
         self.config["ideal"] = False
-        measured = generate_observations(truth, self.config, seed=1)["tables"]["geophysical_observations"]
+        measured = generate_observations(truth, self.config, seed=1)["tables"]["gamma_observations"]
         self.assertEqual(measured[0]["gamma_sigma_cps"], 2)
-        self.assertNotEqual(measured[0]["gamma_count_rate_cps"], rows[0]["gamma_count_rate_cps"])
+        self.assertNotEqual(measured[0]["gamma_count_rate_cps"], gamma[0]["gamma_count_rate_cps"])
         text = json.dumps(bundle)
         for key in ("geophysical_fields", "geophysical_source", "magnetic_decay_m", "SECRET-URANIUM"):
             self.assertNotIn(key, text)
         with tempfile.TemporaryDirectory() as folder:
-            root = save_observations(bundle, folder).parent
-            feature = json.loads((root / "tables/geophysics/geophysical_observations.geojson").read_text())["features"][0]
-            self.assertEqual(feature["geometry"]["coordinates"], [5, 5])
-            record = json.loads((root / "objects/geophysics/GEO-0001.json").read_text())
-            self.assertEqual(record["tables"]["geophysical_observations"], rows[:1])
+            root = Path(folder)
+            legacy_path = root / "tables/geophysics/geophysical_observations.csv"
+            legacy_path.parent.mkdir(parents=True)
+            legacy_path.touch()
+            save_observations(bundle, root)
+            self.assertFalse(legacy_path.exists())
+            for method, table in GEOPHYSICAL_TABLES.items():
+                directory = GEOPHYSICAL_DIRECTORIES[table]
+                path = root / "tables" / directory / f"{table}.csv"
+                template = ROOT / "templates/observations" / path.name
+                self.assertEqual(path.read_text().splitlines()[0], template.read_text().splitlines()[0])
+                self.assertEqual(load_geophysical_csv(path, method, self.config["campaign_id"]), bundle["tables"][table])
+                feature = json.loads(path.with_suffix(".geojson").read_text())["features"][0]
+                self.assertEqual(feature["geometry"]["coordinates"], [5, 5])
+                record = json.loads((root / "objects" / directory / f"{GEOPHYSICAL_PREFIXES[method]}-0001.json").read_text())
+                self.assertEqual(record["tables"], {table: bundle["tables"][table][:1]})
 
     def test_both_channels_support_separate_targets_without_promoting_unassayed_anomalies(self):
         bundle = generate_observations(self.truth(), self.config, seed=1)
@@ -83,6 +100,12 @@ class GeophysicsTests(unittest.TestCase):
         self.assertIn("geophysics_gamma", targets["uranium"]["supporting_signals"])
         self.assertEqual(result["summary"]["targets_supported_by_geophysics"], 2)
         self.assertGreaterEqual(result["summary"]["geophysical_anomaly_count"], 2)
+        self.assertTrue(targets["iron"]["geophysical_evidence"]["observation_id"].startswith("MAG-"))
+        self.assertTrue(targets["uranium"]["geophysical_evidence"]["observation_id"].startswith("GAM-"))
+        gamma = bundle["tables"].pop("gamma_observations")
+        magnetic_only = recognize_deposits(bundle, self.minerals)
+        self.assertEqual({row["method"] for row in magnetic_only["geophysical_anomalies"]}, {"magnetic"})
+        bundle["tables"]["gamma_observations"] = gamma
         bundle["tables"]["borehole_assays"] = []
         result = recognize_deposits(bundle, self.minerals)
         self.assertEqual(result["targets"], [])
@@ -101,17 +124,18 @@ class GeophysicsTests(unittest.TestCase):
         wells = hybrid["tables"]["borehole_collars"]
         self.assertEqual(len(wells), 10)
         self.assertEqual(wells[:4], random_plan["tables"]["borehole_collars"][:4])
-        rows = hybrid["tables"]["geophysical_observations"]
-        self.assertEqual(rows, random_plan["tables"]["geophysical_observations"])
-        by_id = {row["observation_id"]: row for row in rows}
+        channels = {method: hybrid["tables"][table] for method, table in GEOPHYSICAL_TABLES.items()}
+        for method, table in GEOPHYSICAL_TABLES.items():
+            self.assertEqual(channels[method], random_plan["tables"][table])
+        by_channel = {method: {row["observation_id"]: row for row in rows} for method, rows in channels.items()}
         targets = hybrid["drilling_targets"]
         self.assertEqual({target["method"] for target in targets.values()}, {"magnetic", "gamma"})
         self.assertGreater(max(Counter(target["observation_id"] for target in targets.values()).values()), 1)
-        radius = 1.5 * survey_radius(truth["dimensions"], len(rows))
+        radius = 1.5 * survey_radius(truth["dimensions"], len(channels["magnetic"]))
         for well in wells:
             validate_trajectory({**well, "depth_m": well["total_depth_m"]}, truth["dimensions"])
             if target := targets.get(well["hole_id"]):
-                reading = by_id[target["observation_id"]]
+                reading = by_channel[target["method"]][target["observation_id"]]
                 distance = math.dist((well["x_m"], well["y_m"]), (reading["x_m"], reading["y_m"]))
                 self.assertLessEqual(distance, radius + 1e-6)
 
@@ -132,7 +156,7 @@ class GeophysicsTests(unittest.TestCase):
     def test_deep_uranium_remains_an_assay_target_with_no_surface_gamma_support(self):
         bundle = generate_observations(self.truth(5), self.config, seed=1)
         # An unrelated high surface reading above the hole must not corroborate its deep assay.
-        bundle["tables"]["geophysical_observations"][-1]["gamma_count_rate_cps"] = 400
+        bundle["tables"]["gamma_observations"][-1]["gamma_count_rate_cps"] = 400
         result = recognize_deposits(bundle, self.minerals)
         uranium = next(target for target in result["targets"] if target["mineral_id"] == "uranium")
         self.assertEqual(uranium["from_m"], 5)

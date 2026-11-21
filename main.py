@@ -127,6 +127,8 @@ def main() -> None:
     print(f"Наблюдений обнажений: {observations['summary']['outcrop_count']}")
     print(f"Точек съёмки рельефа: {observations['summary']['terrain_observation_count']}")
     print(f"Точек геофизической съёмки: {observations['summary']['geophysical_observation_count']}")
+    print(f"Магнитных наблюдений: {observations['summary']['magnetic_observation_count']}")
+    print(f"Гамма-наблюдений: {observations['summary']['gamma_observation_count']}")
     print(f"Траншей: {observations['summary']['trench_count']}")
     print(f"Наблюдений зон разломов: {observations['summary']['fault_observation_count']}")
     print(f"Контрольных проб: {observations['summary']['qc_sample_count']}")

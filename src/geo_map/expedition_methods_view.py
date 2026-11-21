@@ -56,7 +56,8 @@ PRELIMINARY_METHODS_HTML = r'''
         <p id="terrainSurveyLegend"></p>
       </div>
       <div id="geophysicalOverview" class="panel-card method-overview hidden">
-        <div class="method-toolbar"><div><h3>Магнитное поле и гамма-фон</h3><div id="geophysicalCaption" class="muted"></div></div><select id="geophysicalChannel" aria-label="Канал геофизической съёмки"><option value="magnetic">Магнитная аномалия</option><option value="gamma">Гамма-фон</option></select></div>
+        <h3 id="geophysicalHeading"></h3>
+        <div id="geophysicalCaption" class="muted"></div>
         <svg id="geophysicalMap" class="method-map" viewBox="0 0 650 300" role="img" aria-label="Значения геофизической съёмки"></svg>
       </div>
 '''

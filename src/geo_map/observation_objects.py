@@ -11,6 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from .geophysical_observations import GEOPHYSICAL_DIRECTORIES, GEOPHYSICAL_TABLES
 from .observation_sources import BOREHOLE_SOURCE_KINDS, borehole_source_kind
 
 
@@ -22,7 +23,7 @@ OBJECT_TABLES = {
     "surface_samples": ("sample_id", ("surface_geochemistry",)),
     "outcrop_observations": ("observation_id", ("outcrop_observations",)),
     "terrain_observations": ("observation_id", ("terrain_observations",)),
-    "geophysical_observations": ("observation_id", ("geophysical_observations",)),
+    **{table: ("observation_id", (table,)) for table in GEOPHYSICAL_TABLES.values()},
     "quality_control_samples": ("sample_id", ("quality_control",)),
     "structural_observations": ("observation_id", ("structural_observations", "fault_intersections")),
 }
@@ -59,7 +60,7 @@ def _object_layout(groups: dict, collars: list[dict]):
     paths = {kind: {identifier: f"{folder}/{names[kind][identifier]}.json" for identifier, folder in entries.items()}
              for kind, entries in folders.items()}
     for kind, folder in (("surface_samples", "surface_geochemistry"), ("outcrop_observations", "outcrops"),
-                         ("terrain_observations", "terrain"), ("geophysical_observations", "geophysics")):
+                         ("terrain_observations", "terrain"), *GEOPHYSICAL_DIRECTORIES.items()):
         paths[kind] = {identifier: f"{folder}/{name}.json" for identifier, name in names[kind].items()}
     paths["quality_control_samples"] = {}
     for identifier, name in names["quality_control_samples"].items():

@@ -40,17 +40,17 @@ def _select_centers(anomalies, radius, target_count):
     return centers
 
 
-def target_boreholes(holes, bounds, dimensions, measurements, random_fraction):
+def target_boreholes(holes, bounds, dimensions, channels, random_fraction):
     """Keep the first random holes and replace feasible later placements using measured anomalies."""
     if len(holes) < 2:
         return
     random_count = min(len(holes) - 1, max(1, math.floor(len(holes) * random_fraction + 0.5)))
-    anomalies, _ = detect_geophysical_anomalies(measurements, spread_multiplier=2, uncertainty_multiplier=2)
+    anomalies, _ = detect_geophysical_anomalies(channels, spread_multiplier=2, uncertainty_multiplier=2)
     anomalies = [row for row in anomalies
                  if 0 <= row["x_m"] < dimensions["width_m"] and 0 <= row["y_m"] < dimensions["height_m"]]
     if not anomalies:
         return
-    radius = 1.5 * survey_radius(dimensions, len(measurements))
+    radius = 1.5 * survey_radius(dimensions, max(map(len, channels.values())))
     centers = _select_centers(anomalies, radius, len(holes) - random_count)
     # Visit all centers first, then progressively fill their neighborhoods with nearby sites.
     offsets = sorted(((x, y) for x in range(-3, 4) for y in range(-3, 4) if x*x + y*y <= 9),

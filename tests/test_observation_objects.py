@@ -25,7 +25,7 @@ class ObservationObjectTests(unittest.TestCase):
             manifest = read_json(root / "index.json")
             records = defaultdict(list)
             for kind, entries in manifest["objects"].items():
-                if kind not in {"outcrop_observations", "terrain_observations", "geophysical_observations"}:
+                if kind not in {"outcrop_observations", "terrain_observations", "magnetic_observations", "gamma_observations"}:
                     self.assertTrue(entries, kind)
                 for identifier, path in entries.items():
                     item = read_json(root / path)
