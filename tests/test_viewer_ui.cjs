@@ -110,8 +110,16 @@ if (vm.runInContext('Boolean(MAP_DATA.terrain)', context)) {
 
 assert.equal(location.hash, '#truth');
 assert.equal(get('truthPanel').classList.contains('hidden'), false);
+assert.equal(get('similarityPanel').classList.contains('hidden'), true);
+get('tab-truth').fire('keydown', {key: 'End'});
+assert.equal(location.hash, '#similarity');
+assert.equal(get('tab-similarity').attributes['aria-selected'], 'true');
+assert.equal(get('truthPanel').classList.contains('hidden'), true);
+assert.equal(get('similarityPanel').classList.contains('hidden'), false);
+assert.match(html, /Сравнение с истинной картой/);
 get('tab-expedition').click();
 assert.equal(get('truthPanel').classList.contains('hidden'), true);
+assert.equal(get('similarityPanel').classList.contains('hidden'), true);
 assert.equal(get('expeditionPanel').classList.contains('hidden'), false);
 assert.equal(get('tab-expedition').attributes['aria-selected'], 'true');
 

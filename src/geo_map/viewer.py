@@ -987,7 +987,7 @@ HTML_TEMPLATE = r'''<!doctype html>
 
 def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[str, Any] | None = None,
                  recognition: dict[str, Any] | None = None) -> Path:
-    """Create an offline workspace with truth, expedition and recognition tabs."""
+    """Create an offline workspace for truth, expedition, recognition and comparison."""
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     embedded = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")

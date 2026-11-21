@@ -70,6 +70,9 @@ WORKSPACE_STYLES = r'''
       .expedition-heading { align-items: flex-start; flex-direction: column; }
       .table-footer { align-items: flex-start; flex-direction: column; }
     }
+    @media (max-width: 480px) {
+      .workspace-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
 '''
 
 WORKSPACE_TABS = r'''
@@ -77,6 +80,7 @@ WORKSPACE_TABS = r'''
     <button class="workspace-tab" id="tab-truth" role="tab" aria-controls="truthPanel" aria-selected="true" data-workspace="truth"><span class="tab-number">01</span>Истинная карта</button>
     <button class="workspace-tab" id="tab-expedition" role="tab" aria-controls="expeditionPanel" aria-selected="false" tabindex="-1" data-workspace="expedition"><span class="tab-number">02</span>Разведочная экспедиция</button>
     <button class="workspace-tab" id="tab-recognized" role="tab" aria-controls="recognizedPanel" aria-selected="false" tabindex="-1" data-workspace="recognized"><span class="tab-number">03</span>Распознанная карта</button>
+    <button class="workspace-tab" id="tab-similarity" role="tab" aria-controls="similarityPanel" aria-selected="false" tabindex="-1" data-workspace="similarity"><span class="tab-number">04</span>Оценка сходства</button>
   </nav>
 '''
 
@@ -143,12 +147,15 @@ EXPEDITION_PANEL = r'''
       </div>
     </div>
   </section>
+  <section id="similarityPanel" class="workspace-page hidden" role="tabpanel" aria-labelledby="tab-similarity" tabindex="0">
+    <div class="empty-card"><h2>Сравнение с истинной картой</h2><p>Оценка сходства пока недоступна.</p></div>
+  </section>
 '''
 
 WORKSPACE_SCRIPT = r'''
     (() => {
       const tabs = [...document.querySelectorAll('.workspace-tab')];
-      const panels = {truth: 'truthPanel', expedition: 'expeditionPanel', recognized: 'recognizedPanel'};
+      const panels = {truth: 'truthPanel', expedition: 'expeditionPanel', recognized: 'recognizedPanel', similarity: 'similarityPanel'};
       const truthStats = document.getElementById('headerStats').innerHTML;
       function activate(name) {
         if (!panels[name]) name = 'truth';
@@ -161,7 +168,7 @@ WORKSPACE_SCRIPT = r'''
         if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
         document.getElementById('headerStats').innerHTML = name === 'truth' ? truthStats : name === 'expedition' && OBSERVATION_DATA
           ? `<span>${OBSERVATION_DATA.summary.hole_count} скважин</span><span>${OBSERVATION_DATA.summary.total_sample_count ?? OBSERVATION_DATA.summary.sample_count} полевых проб</span>`
-          : '<span>Поиск по наблюдениям</span>';
+          : name === 'similarity' ? '<span>Сравнение карт</span>' : '<span>Поиск по наблюдениям</span>';
         if (name === 'truth') requestAnimationFrame(resizeCanvas);
       }
       for (const button of document.querySelectorAll('[data-workspace]')) button.addEventListener('click', () => activate(button.dataset.workspace));
