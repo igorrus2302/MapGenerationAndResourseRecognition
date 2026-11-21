@@ -15,6 +15,34 @@ FLOOR_DEVIATION = {"magnetic": 8, "gamma": 4}
 MIN_MEASUREMENTS = 8
 
 
+def detect_geophysical_anomalies(rows, *, spread_multiplier=3.5, uncertainty_multiplier=3):
+    """Estimate channel backgrounds and detect deviations in measured survey rows."""
+    anomalies, backgrounds = [], []
+    for method, (field, sigma_field) in CHANNELS.items():
+        usable = [row for row in rows if row.get(field) is not None]
+        stats = {"method": method, "unit": UNITS[method], "measurement_count": len(usable),
+                 "status": "insufficient_measurements"}
+        backgrounds.append(stats)
+        if len(usable) < MIN_MEASUREMENTS:
+            continue
+        background = median(row[field] for row in usable)
+        mad = median(abs(row[field] - background) for row in usable)
+        threshold = max(spread_multiplier * 1.4826 * mad,
+                        uncertainty_multiplier * median(row.get(sigma_field, 0) for row in usable),
+                        FLOOR_DEVIATION[method])
+        stats.update(status="estimated", median=background, mad=mad, deviation_threshold=threshold)
+        for row in usable:
+            delta = row[field] - background
+            required = max(threshold, uncertainty_multiplier * row.get(sigma_field, 0))
+            if (abs(delta) if method == "magnetic" else delta) < required:
+                continue
+            anomalies.append({"observation_id": row["observation_id"], "method": method, "unit": UNITS[method],
+                              "x_m": row["x_m"], "y_m": row["y_m"], "surface_elevation_m": row.get("surface_elevation_m"),
+                              "measured_value": row[field], "background_value": background,
+                              "deviation": round(delta, 6), "deviation_threshold": required})
+    return anomalies, backgrounds
+
+
 class GeophysicalEvidence:
     def __init__(self, observations):
         rows = observations["tables"].get("geophysical_observations", ())
@@ -26,30 +54,12 @@ class GeophysicalEvidence:
             return
         plan = observations.get("plan", {}).get("methods", {}).get("geophysical_survey", {})
         self.radius_m = survey_radius(observations["campaign"], plan.get("point_count", len(rows)))
-        for method, (field, sigma_field) in CHANNELS.items():
-            usable = [row for row in rows if row.get(field) is not None]
-            stats = {"method": method, "unit": UNITS[method], "measurement_count": len(usable),
-                     "status": "insufficient_measurements"}
-            self.backgrounds.append(stats)
-            if len(usable) < MIN_MEASUREMENTS:
-                continue
-            background = median(row[field] for row in usable)
-            mad = median(abs(row[field] - background) for row in usable)
-            threshold = max(3.5 * 1.4826 * mad, 3 * median(row.get(sigma_field, 0) for row in usable),
-                            FLOOR_DEVIATION[method])
-            stats.update(status="estimated", median=background, mad=mad, deviation_threshold=threshold)
-            anomalies = []
-            for row in usable:
-                delta = row[field] - background
-                required = max(threshold, 3 * row.get(sigma_field, 0))
-                if (abs(delta) if method == "magnetic" else delta) < required:
-                    continue
-                anomalies.append({"observation_id": row["observation_id"], "method": method, "unit": UNITS[method],
-                                  "x_m": row["x_m"], "y_m": row["y_m"], "surface_elevation_m": row.get("surface_elevation_m"),
-                                  "measured_value": row[field], "background_value": background,
-                                  "deviation": round(delta, 6), "deviation_threshold": required})
-            self.anomalies.extend(anomalies)
-            self.grids[method] = index_points(anomalies, self.radius_m)
+        self.anomalies, self.backgrounds = detect_geophysical_anomalies(rows)
+        for stats in self.backgrounds:
+            if stats["status"] == "estimated":
+                method = stats["method"]
+                self.grids[method] = index_points((row for row in self.anomalies if row["method"] == method),
+                                                  self.radius_m)
 
     def annotate(self, target):
         rule = METHOD_RULES.get(target.get("mineral_id"))

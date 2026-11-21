@@ -12,8 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from .boreholes import collar_bounds, orientation, validate_trajectory
+from .drilling_plan import DEFAULT_RANDOM_FRACTION, target_boreholes
 from .observation_tools import TruthSampler, _number, _rng, measure_grade
-from .observation_models import EXTRA_TABLE_FIELDS, extend_campaign, validate_extensions
+from .observation_models import EXTRA_TABLE_FIELDS, extend_campaign, survey_geophysics, validate_extensions
 from .observation_objects import save_observation_objects
 from .observation_sources import BOREHOLE_SOURCE_TABLES, describe_borehole_sources, make_borehole_source
 
@@ -56,8 +57,13 @@ def _validate_config(config: dict[str, Any], dimensions: dict[str, Any]) -> None
     if sample_length < 0.000001:
         raise ValueError("Шаг опробования должен быть не меньше 0.000001 м")
     layout = drilling.get("layout", "grid")
-    if layout not in {"grid", "random", "manual"}:
-        raise ValueError("drilling.layout: допустимы grid, random, manual")
+    if layout not in {"grid", "random", "manual", "hybrid"}:
+        raise ValueError("drilling.layout: допустимы grid, random, manual, hybrid")
+    if layout == "hybrid":
+        random_fraction = _number(drilling.get("random_fraction", DEFAULT_RANDOM_FRACTION),
+                                  "drilling.random_fraction", positive=True)
+        if random_fraction >= 1:
+            raise ValueError("drilling.random_fraction должна быть меньше 1")
     if layout == "manual":
         holes = drilling.get("holes", [])
         if not holes:
@@ -97,9 +103,11 @@ def _validate_config(config: dict[str, Any], dimensions: dict[str, Any]) -> None
     validate_extensions(config, dimensions, planned_samples, planned_samples * len(analytes))
 
 
-def _plan_holes(dimensions: dict[str, Any], drilling: dict[str, Any], seed: int) -> list[dict[str, Any]]:
+def _plan_holes(dimensions: dict[str, Any], drilling: dict[str, Any], seed: int, *,
+                geophysical_rows: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     defaults = orientation(drilling)
-    if drilling.get("layout", "grid") == "manual":
+    layout = drilling.get("layout", "grid")
+    if layout == "manual":
         holes = []
         for settings in drilling["holes"]:
             hole = {"depth_m": drilling["depth_m"], **settings,
@@ -120,13 +128,16 @@ def _plan_holes(dimensions: dict[str, Any], drilling: dict[str, Any], seed: int)
     for index in range(count):
         rng = _rng(seed, "plan", index)
         (xmin, xmax), (ymin, ymax) = bounds[index % len(bounds)]
-        if drilling.get("layout", "grid") == "random":
+        if layout in {"random", "hybrid"}:
             fx, fy = rng.uniform(0.05, 0.95), rng.uniform(0.05, 0.95)
         else:
             fx = ((index % columns) + 0.5) / columns
             fy = ((index // columns) + 0.5) / rows
         holes.append({"hole_id": f"BH-{index + 1:03d}", "x_m": xmin + fx * (xmax - xmin),
                       "y_m": ymin + fy * (ymax - ymin), "depth_m": drilling["depth_m"], **angles[index % len(angles)]})
+    if layout == "hybrid" and geophysical_rows:
+        target_boreholes(holes, bounds, dimensions, geophysical_rows,
+                         drilling.get("random_fraction", DEFAULT_RANDOM_FRACTION))
     return holes
 
 
@@ -140,7 +151,6 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
     noise = {} if ideal else config.get("noise", {})
     sigma = lambda key: noise.get(key, 0.0)
     sampler = TruthSampler(truth_map)
-    holes = _plan_holes(dimensions, config["drilling"], seed)
     tables: dict[str, list[dict[str, Any]]] = {name: [] for name in TABLE_FIELDS}
     rocks = {rock["id"]: rock for rock in truth_map["rocks"]}
     campaign_id, logged_date = config["campaign_id"], config["date"]
@@ -157,6 +167,10 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
         row.update(values)
         tables[table].append(row)
 
+    survey_geophysics(truth_map, config, seed, sampler, append)
+    drilling = config["drilling"]
+    holes = _plan_holes(dimensions, drilling, seed, geophysical_rows=tables["geophysical_observations"])
+    step = drilling["sample_length_m"]
     for hole in holes:
         hole_id, x, y, depth = hole["hole_id"], hole["x_m"], hole["y_m"], hole["depth_m"]
         hole["collar_elevation_m"] = sampler.column(x, y).get("surface_elevation_m", 0)
@@ -196,7 +210,6 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
                        depth_m=boundaries[index], feature_type="contact", confidence="high" if ideal else "medium",
                        observation_method="core_logging", notes="Контакт пород в керне; ориентация не определялась")
 
-        step = config["drilling"]["sample_length_m"]
         for index in range(math.ceil(depth / step)):
             start = round(index * step, 6)
             # Decimal steps can make ceil(depth / step) one interval too large.
@@ -265,6 +278,9 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
         "tables": tables,
         "geojson": extra["geojson"],
     }
+    if drilling.get("layout") == "hybrid":
+        bundle["plan"]["random_fraction"] = drilling.get("random_fraction", DEFAULT_RANDOM_FRACTION)
+        bundle["drilling_targets"] = {hole["hole_id"]: hole["target"] for hole in holes if "target" in hole}
     bundle["borehole_sources"] = describe_borehole_sources(bundle)
     return bundle
 

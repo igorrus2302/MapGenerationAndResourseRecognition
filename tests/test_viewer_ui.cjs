@@ -147,7 +147,18 @@ if (!observations) {
   const lastHole = observations.tables.borehole_collars.at(-1).hole_id;
   get('observationHoleFilter').value = lastHole;
   get('observationHoleFilter').fire('change');
-  assert.equal(get('holeProfileTitle').textContent, lastHole);
+  const drillingTargets = observations.drilling_targets || {};
+  const placementKey = get('surveyPlacementKey');
+  assert.equal(placementKey.classList.contains('hidden'), observations.plan.layout !== 'hybrid');
+  const lastTarget = drillingTargets[lastHole];
+  if (lastTarget) {
+    const methodLabel = {magnetic: 'Магнитная аномалия', gamma: 'Повышенный гамма-фон'}[lastTarget.method];
+    assert.equal(get('holeProfileTitle').textContent, `${lastHole} · ${methodLabel} · ${lastTarget.observation_id}`);
+    assert.ok(placementKey.innerHTML.includes(methodLabel));
+    assert.ok(get('surveyMap').innerHTML.includes(lastTarget.observation_id));
+  } else {
+    assert.equal(get('holeProfileTitle').textContent, lastHole);
+  }
   get('observationTabs').children[2].click();
   assert.match(get('observationTableHead').innerHTML, /Компонент/);
   assert.equal(get('analyteFilterLabel').classList.contains('hidden'), false);

@@ -16,8 +16,12 @@ def survey_radius(campaign, planned_points):
 def index_points(rows, radius):
     grid = defaultdict(list)
     for row in rows:
-        grid[math.floor(row["x_m"] / radius), math.floor(row["y_m"] / radius)].append(row)
+        add_indexed_point(grid, row, radius)
     return grid
+
+
+def add_indexed_point(grid, row, radius):
+    grid[math.floor(row["x_m"] / radius), math.floor(row["y_m"] / radius)].append(row)
 
 
 def nearest_point(grid, xy, radius, accepts=None):

@@ -99,6 +99,7 @@ EXPEDITION_PANEL = r'''
           <h3>План бурения</h3><div class="muted">Нажмите на скважину, чтобы открыть её данные</div>
           <svg id="surveyMap" class="survey-map" viewBox="0 0 520 300" role="group" aria-label="Положения наблюдённых скважин"></svg>
           <div class="muted" id="surveyCaption"></div>
+          <div class="profile-key hidden" id="surveyPlacementKey" aria-label="Основания выбора скважин"></div>
         </div>
         <div class="panel-card">
           <div class="profile-heading"><div><h3 id="holeProfileTitle"></h3><div id="holeProfileCaption" class="muted"></div></div><select id="profileAnalyte" aria-label="Компонент на графике содержания"></select></div>
@@ -207,6 +208,21 @@ WORKSPACE_SCRIPT = r'''
       const categoryNames = {completed: 'Завершена', medium: 'Средняя', high: 'Высокая', low: 'Низкая', contact: 'Контакт', primary: 'Первичная', not_checked: 'Не проверено', core_logging: 'Описание керна', synthetic_core: 'Синтетическое бурение', synthetic_core_measurement: 'Синтетическое измерение', synthetic_assay: 'Синтетический анализ', local_cartesian: 'Локальная, м', lt: 'Ниже предела'};
       const tables = observations.tables;
       const holes = tables.borehole_collars;
+      const hybridDrilling = observations.plan.layout === 'hybrid';
+      const drillingTargets = new Map(Object.entries(observations.drilling_targets ?? {}));
+      const drillingKinds = {
+        random: {label: 'Случайное размещение', color: '#1677a8'},
+        magnetic: {label: 'Магнитная аномалия', color: '#b45d15'},
+        gamma: {label: 'Повышенный гамма-фон', color: '#783fb3'}
+      };
+      if (hybridDrilling) {
+        const counts = {random: holes.length - drillingTargets.size, magnetic: 0, gamma: 0};
+        for (const target of drillingTargets.values()) counts[target.method]++;
+        const key = element('surveyPlacementKey');
+        key.classList.remove('hidden');
+        key.innerHTML = Object.entries(drillingKinds).filter(([kind]) => counts[kind]).map(([kind, {label, color}]) =>
+          `<span><i style="background:${color}"></i>${label} · ${counts[kind]}</span>`).join('');
+      }
       const drillingSources = observations.borehole_sources || [];
       const sourceByKind = new Map(drillingSources.map(source => [source.kind, source]));
       const rocks = Object.fromEntries(observations.rock_catalog.map(rock => [rock.id, rock]));
@@ -226,7 +242,7 @@ WORKSPACE_SCRIPT = r'''
       const filterAnalytes = [...new Map([...observations.plan.analytes, ...(observations.plan.methods?.surface_geochemistry?.analytes || [])].map(item => [item.analyte, item])).values()];
       element('observationAnalyteFilter').innerHTML = '<option value="">Все компоненты</option>' + filterAnalytes.map(item => `<option value="${escape(item.analyte)}">${escape(item.analyte)} · ${escape(item.unit)}</option>`).join('');
       element('expeditionNotes').innerHTML = observations.notes.map(note => `<li>${escape(note)}</li>`).join('');
-      const layout = {grid: 'регулярная сетка', random: 'случайные точки', manual: 'ручной план'}[observations.plan.layout];
+      const layout = {grid: 'регулярная сетка', random: 'случайные точки', manual: 'ручной план', hybrid: 'случайные точки и сгущение по геофизической съёмке'}[observations.plan.layout];
       element('expeditionPlan').textContent = `Размещение скважин: ${layout}. Интервал скважинных проб: ${number(observations.plan.sample_length_m)} м. Всего пропущено проб: ${summary.total_missing_sample_count ?? summary.missing_sample_count}. Режим: ${observations.plan.ideal ? 'идеальные наблюдения' : 'с погрешностями'}. Параметры экспедиции задаются при генерации.`;
 
       function download(content, filename, type) {
@@ -284,9 +300,13 @@ WORKSPACE_SCRIPT = r'''
           const end = holePosition(hole, hole.total_depth_m);
           const ex = left + end.x * scale, ey = top + h - end.y * scale;
           const selected = hole.hole_id === selectedHole;
-          const color = selected ? '#e95e2a' : '#1677a8';
+          const target = drillingTargets.get(hole.hole_id);
+          const kind = target?.method ?? 'random';
+          const placement = hybridDrilling ? ` · ${drillingKinds[kind].label}${target ? ` · ${target.observation_id}` : ''}` : '';
+          const color = hybridDrilling ? drillingKinds[kind].color : selected ? '#e95e2a' : '#1677a8';
+          const border = selected && hybridDrilling ? '#102a43' : 'white';
           if (hole.dip_deg !== -90) markup += `<line class="hole-dot" data-hole="${escape(hole.hole_id)}" data-hole-trajectory="${escape(hole.hole_id)}" x1="${cx}" y1="${cy}" x2="${ex}" y2="${ey}" stroke="${color}" stroke-width="${selected ? 4 : 2}" opacity="${selected ? 1 : .55}"><title>${escape(hole.hole_id)} · проекция ствола</title></line><circle cx="${ex}" cy="${ey}" r="3" fill="${color}"/>`;
-          markup += `<circle class="hole-dot" role="button" tabindex="0" aria-label="${escape(hole.hole_id)}" aria-pressed="${selected}" data-hole="${escape(hole.hole_id)}" cx="${cx}" cy="${cy}" r="${selected ? 7 : 5}" fill="${color}" stroke="white" stroke-width="2"><title>${escape(hole.hole_id)} · ствол ${number(hole.total_depth_m)} м · угол ${number(hole.dip_deg)}° · азимут ${number(hole.azimuth_deg)}°</title></circle>`;
+          markup += `<circle class="hole-dot" role="button" tabindex="0" aria-label="${escape(hole.hole_id + placement)}" aria-pressed="${selected}" data-hole="${escape(hole.hole_id)}" cx="${cx}" cy="${cy}" r="${selected ? 7 : 5}" fill="${color}" stroke="${border}" stroke-width="2"><title>${escape(hole.hole_id + placement)} · ствол ${number(hole.total_depth_m)} м · угол ${number(hole.dip_deg)}° · азимут ${number(hole.azimuth_deg)}°</title></circle>`;
         }
         element('surveyMap').innerHTML = markup;
         element('surveyCaption').textContent = `Участок ${number(width)} × ${number(height)} м · крупные точки — устья, линии — проекции наклонных стволов, малые точки — забои`;
@@ -393,7 +413,8 @@ WORKSPACE_SCRIPT = r'''
         const scale = 230 / hole.total_depth_m;
         const axisLeft = 380, axisWidth = 250;
         const maximum = Math.max(...assays.map(row => row.result_value), observations.plan.analytes.find(item => item.analyte === analyte).detection_limit);
-        element('holeProfileTitle').textContent = selectedHole;
+        const target = drillingTargets.get(hole.hole_id);
+        element('holeProfileTitle').textContent = target ? `${selectedHole} · ${drillingKinds[target.method].label} · ${target.observation_id}` : selectedHole;
         element('holeProfileCaption').textContent = `Устье X ${number(hole.x_m)} · Y ${number(hole.y_m)} м · ствол ${number(hole.total_depth_m)} м · угол ${number(hole.dip_deg)}° · азимут ${number(hole.azimuth_deg)}°`;
         let markup = '<text x="12" y="18" font-size="11" fill="#486581">Вдоль ствола</text><text x="162" y="18" font-size="12" fill="#486581">Описание керна</text><text x="380" y="18" font-size="12" fill="#486581">Содержание по пробам</text>';
         for (let index = 0; index <= 5; index++) {

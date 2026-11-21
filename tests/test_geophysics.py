@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
+import math
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
 
 from test_observations import ROOT, campaign_config, small_map
+from geo_map.boreholes import validate_trajectory
 from geo_map.geophysics import add_geophysical_fields
 from geo_map.observations import generate_observations, save_observations
 from geo_map.recognition import recognize_deposits
+from geo_map.recognition_spatial import survey_radius
 
 
 class GeophysicsTests(unittest.TestCase):
@@ -83,6 +87,47 @@ class GeophysicsTests(unittest.TestCase):
         result = recognize_deposits(bundle, self.minerals)
         self.assertEqual(result["targets"], [])
         self.assertTrue(result["geophysical_anomalies"])
+
+    def test_hybrid_drilling_uses_measured_anomalies_and_preserves_random_coverage(self):
+        truth = self.truth()
+        self.config["drilling"] = {
+            "layout": "random", "hole_count": 10, "random_fraction": 0.4, "depth_m": 10, "sample_length_m": 5,
+            "orientations": [{"dip_deg": -90}, {"dip_deg": -60, "azimuth_deg": 90}, {"dip_deg": -60, "azimuth_deg": 270}],
+        }
+        random_plan = generate_observations(truth, self.config, seed=2)
+        self.config["drilling"]["layout"] = "hybrid"
+        hybrid = generate_observations(truth, self.config, seed=2)
+        self.assertEqual(hybrid, generate_observations(truth, self.config, seed=2))
+        wells = hybrid["tables"]["borehole_collars"]
+        self.assertEqual(len(wells), 10)
+        self.assertEqual(wells[:4], random_plan["tables"]["borehole_collars"][:4])
+        rows = hybrid["tables"]["geophysical_observations"]
+        self.assertEqual(rows, random_plan["tables"]["geophysical_observations"])
+        by_id = {row["observation_id"]: row for row in rows}
+        targets = hybrid["drilling_targets"]
+        self.assertEqual({target["method"] for target in targets.values()}, {"magnetic", "gamma"})
+        self.assertGreater(max(Counter(target["observation_id"] for target in targets.values()).values()), 1)
+        radius = 1.5 * survey_radius(truth["dimensions"], len(rows))
+        for well in wells:
+            validate_trajectory({**well, "depth_m": well["total_depth_m"]}, truth["dimensions"])
+            if target := targets.get(well["hole_id"]):
+                reading = by_id[target["observation_id"]]
+                distance = math.dist((well["x_m"], well["y_m"]), (reading["x_m"], reading["y_m"]))
+                self.assertLessEqual(distance, radius + 1e-6)
+
+    def test_hybrid_drilling_falls_back_to_random_without_usable_anomalies(self):
+        truth = self.truth()
+        for cell in truth["cells"]:
+            cell["geophysical_fields"] = {"magnetic_anomaly_nt": 0, "gamma_count_rate_cps": 20}
+        self.config["drilling"].update(layout="random", hole_count=10)
+        baseline = generate_observations(truth, self.config, seed=2)["tables"]["borehole_collars"]
+        self.config["drilling"]["layout"] = "hybrid"
+        for enabled in (True, False):
+            with self.subTest(enabled=enabled):
+                self.config["geophysical_survey"]["enabled"] = enabled
+                hybrid = generate_observations(truth, self.config, seed=2)
+                self.assertEqual(hybrid["drilling_targets"], {})
+                self.assertEqual(hybrid["tables"]["borehole_collars"], baseline)
 
     def test_deep_uranium_remains_an_assay_target_with_no_surface_gamma_support(self):
         bundle = generate_observations(self.truth(5), self.config, seed=1)

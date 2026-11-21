@@ -4,8 +4,9 @@
   "date": "2026-10-22",
   "ideal": false,
   "drilling": {
-    "layout": "grid",
+    "layout": "hybrid",
     "hole_count": 25,
+    "random_fraction": 0.4,
     "depth_m": 300,
     "sample_length_m": 5,
     "orientations": [
