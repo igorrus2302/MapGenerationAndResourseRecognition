@@ -75,42 +75,6 @@ METHODS_SCRIPT = r'''
         structures: {label: 'Структуры', panel: 'structureOverview', tables: ['structural_observations', 'fault_intersections']},
         quality: {label: 'Контроль качества', panel: 'qualityOverview', tables: ['quality_control']}
       };
-      const surveyMethods = {
-        geophysical_survey: {label: 'Геофизика', panel: 'geophysicalOverview', table: 'geophysical_observations', title: 'Точки геофизической съёмки'},
-        terrain_survey: {label: 'Рельеф', panel: 'terrainSurveyOverview', table: 'terrain_observations', title: 'Точки съёмки рельефа'},
-        outcrops: {label: 'Обнажения', panel: 'outcropOverview', table: 'outcrop_observations', title: 'Наблюдения обнажений'}
-      };
-      const preliminarySections = Object.fromEntries(Object.entries(surveyMethods).filter(([key, method]) =>
-        observations.plan.methods?.[key]?.enabled && observations.table_fields[method.table]));
-      categoryNames.surface_mapping = 'Осмотр поверхности';
-      const terrainTypes = {
-        hill: {label: 'Возвышенность', color: '#ad542c'}, depression: {label: 'Понижение', color: '#226caa'},
-        slope: {label: 'Склон', color: '#6544a6'}, flat: {label: 'Ровный участок', color: '#288362'},
-        undetermined: {label: 'Мало данных', color: '#64748b'}
-      };
-      if (preliminarySections.terrain_survey) {
-        Object.assign(fieldNames, {elevation_uncertainty_m: 'Погрешность высоты, м', slope_deg: 'Уклон, °',
-          local_relief_m: 'Относительная высота, м', terrain_type: 'Тип рельефа'});
-        for (const [code, info] of Object.entries(terrainTypes)) categoryNames[code] = info.label;
-        categoryNames.grid_elevation_survey = 'Съёмка высот по сетке';
-      }
-      if (preliminarySections.geophysical_survey) {
-        Object.assign(fieldNames, {magnetic_anomaly_nt: 'Магнитная аномалия, нТл', magnetic_sigma_nt: 'Погрешность магнитного канала, нТл',
-          gamma_count_rate_cps: 'Гамма-фон, имп/с', gamma_sigma_cps: 'Погрешность гамма-канала, имп/с'});
-        categoryNames.ground_geophysical_survey = 'Наземная геофизическая съёмка';
-      }
-      function addMethodButtons(methods, containerId, activate) {
-        const container = element(containerId);
-        return Object.fromEntries(Object.entries(methods).map(([key, method]) => {
-          const button = document.createElement('button');
-          button.className = 'method-section';
-          button.textContent = method.label;
-          button.dataset.method = key;
-          button.addEventListener('click', () => activate(key));
-          container.appendChild(button);
-          return [key, button];
-        }));
-      }
       const sectionButtons = addMethodButtons(sections, 'expeditionSections', activateSection);
       let activeSection = 'boreholes';
       const trenches = tables.trenches || [];
@@ -133,94 +97,6 @@ METHODS_SCRIPT = r'''
       element('observationSampleFilter').addEventListener('input', () => { page = 0; renderTable(); });
       element('observationTrenchFilter').innerHTML = '<option value="">Все траншеи</option>' + trenches.map(row => `<option value="${escape(row.trench_id)}">${escape(row.trench_id)}</option>`).join('');
 
-      function initPreliminary() {
-        const keys = Object.keys(preliminarySections);
-        if (!keys.length) return;
-        let active, surveyPage = 0;
-        const buttons = addMethodButtons(preliminarySections, 'preliminarySections', activateSurvey);
-        element('preliminaryEmpty').classList.add('hidden');
-        element('preliminaryContent').classList.remove('hidden');
-        function drawTable() {
-          const {table} = active;
-          surveyPage = renderObservationRows('preliminary', observations.table_fields[table], tables[table] || [],
-                                              surveyPage, 'Для этого раздела пока нет наблюдений');
-        }
-        function activateSurvey(key) {
-          active = preliminarySections[key];
-          surveyPage = 0;
-          for (const [name, method] of Object.entries(preliminarySections)) {
-            element(method.panel).classList.toggle('hidden', name !== key);
-            buttons[name].setAttribute('aria-pressed', String(name === key));
-          }
-          element('preliminaryDataTitle').textContent = active.title;
-          element('downloadPreliminaryGeoJson').classList.toggle('hidden', !observations.geojson?.[active.table]);
-          drawTable();
-        }
-        element('downloadPreliminaryGeoJson').addEventListener('click', () => downloadGeoJson(active.table));
-        element('downloadPreliminaryCsv').addEventListener('click', () => {
-          const {table} = active;
-          downloadCsv(observations.table_fields[table], tables[table] || [], `${table}.csv`);
-        });
-        element('preliminaryPrevious').addEventListener('click', () => { surveyPage--; drawTable(); });
-        element('preliminaryNext').addEventListener('click', () => { surveyPage++; drawTable(); });
-        activateSurvey(keys[0]);
-      }
-
-      function mapFrame() {
-        const width = observations.campaign.width_m, height = observations.campaign.height_m;
-        const scale = Math.min(560 / width, 230 / height), w = width * scale, h = height * scale;
-        const left = (650 - w) / 2, top = 22;
-        const point = (x, y) => ({x: left + x * scale, y: top + h - y * scale});
-        const markup = `<rect x="${left}" y="${top}" width="${w}" height="${h}" rx="5" fill="#f0f6f8" stroke="#b7ccd8"/><text x="${left}" y="${top - 7}" font-size="11" fill="#627d98">Y · ${number(height)} м</text><text x="${left}" y="${top + h + 20}" font-size="11" fill="#627d98">0</text><text x="${left + w}" y="${top + h + 20}" text-anchor="end" font-size="11" fill="#627d98">X · ${number(width)} м</text>`;
-        return {point, markup};
-      }
-      if (preliminarySections.outcrops) {
-        const outcrops = tables.outcrop_observations || [];
-        const {point, markup} = mapFrame();
-        element('outcropMap').innerHTML = markup + outcrops.map(row => {
-          const {x, y} = point(row.x_m, row.y_m);
-          const color = rocks[row.observed_rock_id]?.color || '#1677a8';
-          return `<circle cx="${x}" cy="${y}" r="4.5" fill="${escape(color)}" stroke="#243b53"><title>${escape(row.observation_id)} · ${escape(row.observed_rock_name)} · ${number(row.surface_elevation_m)} м</title></circle>`;
-        }).join('');
-        element('outcropCaption').textContent = `${number(outcrops.length)} обнажений на ${number(observations.plan.methods.outcrops.point_count)} обследованных точках. Цвет соответствует наблюдённой породе.`;
-      }
-      if (preliminarySections.terrain_survey) {
-        const rows = tables.terrain_observations || [];
-        const config = observations.plan.methods.terrain_survey;
-        const {point, markup} = mapFrame();
-        const radius = Math.max(1.25, Math.min(4.25, 85 / Math.sqrt(rows.length || 1)));
-        const counts = new Map();
-        element('terrainSurveyMap').innerHTML = markup + rows.map(row => {
-          const {x, y} = point(row.x_m, row.y_m);
-          const type = terrainTypes[row.terrain_type] || terrainTypes.undetermined;
-          counts.set(type.label, (counts.get(type.label) || 0) + 1);
-          return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${type.color}"><title>${escape(row.observation_id)} · ${type.label} · ${number(row.surface_elevation_m)} м</title></circle>`;
-        }).join('');
-        element('terrainSurveyCaption').textContent = `${number(rows.length)} точек · порог уклона ${number(config.slope_threshold_deg)}° · порог относительной высоты ${number(config.local_relief_threshold_m)} м`;
-        element('terrainSurveyLegend').innerHTML = Object.values(terrainTypes).filter(type => counts.has(type.label))
-          .map(type => `<span style="color:${type.color}">● ${type.label} · ${number(counts.get(type.label))}</span>`).join(' &nbsp; ');
-      }
-      if (preliminarySections.geophysical_survey) {
-        const selector = element('geophysicalChannel');
-        const rows = tables.geophysical_observations || [];
-        function drawGeophysics() {
-          const {field, label, unit} = geophysicalChannels[selector.value];
-          const values = rows.map(row => row[field]);
-          const minimum = Math.min(...values), maximum = Math.max(...values);
-          const {point, markup} = mapFrame();
-          const radius = Math.max(1.25, Math.min(4.25, 85 / Math.sqrt(rows.length || 1)));
-          element('geophysicalMap').innerHTML = markup + rows.map(row => {
-            const {x, y} = point(row.x_m, row.y_m);
-            const scaled = minimum === maximum ? .5 : (row[field] - minimum) / (maximum - minimum);
-            return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${geophysicalColor(scaled)}"><title>${escape(row.observation_id)} · ${label} ${number(row[field])} ${unit}</title></circle>`;
-          }).join('');
-          element('geophysicalCaption').textContent = rows.length
-            ? `${number(rows.length)} точек · от ${number(minimum)} ${unit} (синий) до ${number(maximum)} ${unit} (оранжевый)`
-            : 'Измерения магнитного поля и гамма-фона отсутствуют.';
-        }
-        selector.addEventListener('change', drawGeophysics);
-        drawGeophysics();
-      }
       const surfaceAnalytes = observations.plan.methods?.surface_geochemistry?.analytes || [];
       element('surfaceMapAnalyte').innerHTML = surfaceAnalytes.map(item => `<option value="${escape(item.analyte)}">${escape(item.analyte)} · ${escape(item.unit)}</option>`).join('');
       function drawSurface() {
@@ -297,6 +173,5 @@ METHODS_SCRIPT = r'''
       const controls = tables.quality_control || [];
       element('qualityMetrics').innerHTML = [['pass', 'в допуске'], ['warning', 'предупреждений'], ['fail', 'вне допуска'], ['not_checked', 'не оценено']].map(([flag, label]) => `<span class="qc-${flag}"><b>${number(controls.filter(row => row.qc_flag === flag).length)}</b>${label}</span>`).join('');
       element('qualityCaption').textContent = `${summary.qc_sample_count || 0} контрольных проб · ${summary.qc_result_count || 0} результатов. Дубликаты, холостые пробы и стандарты отбираются по заданному плану лабораторного контроля.`;
-      initPreliminary();
       drawSurface(); drawTrenches(); activateSection('boreholes');
 '''

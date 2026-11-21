@@ -1,6 +1,7 @@
 """Offline workspace tabs and views that render only public expedition records."""
 
 from .expedition_methods_view import FIELD_METHODS_HTML, METHODS_SCRIPT, METHODS_STYLES, PRELIMINARY_METHODS_HTML
+from .preliminary_view import PRELIMINARY_SCRIPT
 
 WORKSPACE_STYLES = r'''
     .workspace-tabs { height: 62px; display: flex; align-items: stretch; gap: 5px; padding: 8px 22px 0; background: white; border-bottom: 1px solid var(--line); }
@@ -90,7 +91,11 @@ WORKSPACE_TABS = r'''
 
 WORKSPACE_PANELS = r'''
   <section id="preliminaryPanel" class="workspace-page hidden" role="tabpanel" aria-labelledby="tab-preliminary">
-    <div id="preliminaryEmpty" class="empty-card"><h2>Нет предварительных наблюдений</h2><p>Здесь появятся данные съёмки, выполненной до бурения и отбора проб.</p></div>
+    <div id="preliminaryEmpty" class="empty-card">
+      <h2>Предварительные наблюдения</h2>
+      <p id="preliminaryStatus" aria-live="polite">Соберите данные о магнитном поле, гамма-фоне, рельефе и обнажениях на текущей карте.</p>
+      <button id="collectPreliminary" type="button" class="primary-button">Собрать наблюдения</button>
+    </div>
     <div id="preliminaryContent" class="hidden">
       <div class="expedition-heading">
         <div><h2>Предварительные наблюдения</h2><p>Данные съёмки участка до бурения и отбора проб.</p></div>
@@ -209,13 +214,8 @@ WORKSPACE_SCRIPT = r'''
       activate(location.hash.slice(1));
     })();
 
-    // This view receives the public bundle only. All profiles and tables use its records.
+    // Fieldwork and recognition render public records. The preliminary survey samples the map on demand.
     ((observations) => {
-      if (!observations) {
-        document.getElementById('expeditionEmpty').classList.remove('hidden');
-        document.getElementById('expeditionContent').classList.add('hidden');
-        return;
-      }
       const element = id => document.getElementById(id);
       const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character]));
       const number = value => Number(value).toLocaleString('ru-RU', {maximumFractionDigits: 8});
@@ -233,6 +233,18 @@ WORKSPACE_SCRIPT = r'''
         strike_deg: 'Простирание, °', dip_direction_deg: 'Направление падения, °', offset_estimate_m: 'Оценка смещения, м', observation_method: 'Метод наблюдения', notes: 'Примечания'
       };
       const categoryNames = {completed: 'Завершена', medium: 'Средняя', high: 'Высокая', low: 'Низкая', contact: 'Контакт', primary: 'Первичная', not_checked: 'Не проверено', core_logging: 'Описание керна', synthetic_core: 'Синтетическое бурение', synthetic_core_measurement: 'Синтетическое измерение', synthetic_assay: 'Синтетический анализ', local_cartesian: 'Локальная, м', lt: 'Ниже предела'};
+      const pageSize = 50;
+      const terrainTypes = {
+        hill: {label: 'Возвышенность', color: '#ad542c'}, depression: {label: 'Понижение', color: '#226caa'},
+        slope: {label: 'Склон', color: '#6544a6'}, flat: {label: 'Ровный участок', color: '#288362'},
+        undetermined: {label: 'Мало данных', color: '#64748b'}
+      };
+      __PRELIMINARY_SCRIPT__
+      if (!observations) {
+        document.getElementById('expeditionEmpty').classList.remove('hidden');
+        document.getElementById('expeditionContent').classList.add('hidden');
+        return;
+      }
       const tables = observations.tables;
       const holes = tables.borehole_collars;
       const hybridDrilling = observations.plan.layout === 'hybrid';
@@ -256,7 +268,6 @@ WORKSPACE_SCRIPT = r'''
       let selectedHole = holes[0]?.hole_id;
       let activeTable = 'borehole_collars';
       let page = 0;
-      const pageSize = 50;
       const summary = observations.summary;
       element('expeditionTitle').textContent = observations.campaign.title;
       element('expeditionSubtitle').textContent = `${observations.campaign.campaign_id} · ${observations.campaign.date} · бурение, полевые пробы и лабораторные анализы`;
@@ -272,6 +283,26 @@ WORKSPACE_SCRIPT = r'''
       const layout = {grid: 'регулярная сетка', random: 'случайные точки', manual: 'ручной план', hybrid: 'случайные точки и сгущение по геофизической съёмке'}[observations.plan.layout];
       element('expeditionPlan').textContent = `Размещение скважин: ${layout}. Интервал скважинных проб: ${number(observations.plan.sample_length_m)} м. Всего пропущено проб: ${summary.total_missing_sample_count ?? summary.missing_sample_count}. Режим: ${observations.plan.ideal ? 'идеальные наблюдения' : 'с погрешностями'}. Параметры экспедиции задаются при генерации.`;
 
+      function addMethodButtons(methods, containerId, activate) {
+        const container = element(containerId);
+        return Object.fromEntries(Object.entries(methods).map(([key, method]) => {
+          const button = document.createElement('button');
+          button.className = 'method-section';
+          button.textContent = method.label;
+          button.dataset.method = key;
+          button.addEventListener('click', () => activate(key));
+          container.appendChild(button);
+          return [key, button];
+        }));
+      }
+      function mapFrame(dimensions = observations.campaign) {
+        const width = dimensions.width_m, height = dimensions.height_m;
+        const scale = Math.min(560 / width, 230 / height), w = width * scale, h = height * scale;
+        const left = (650 - w) / 2, top = 22;
+        const point = (x, y) => ({x: left + x * scale, y: top + h - y * scale});
+        const markup = `<rect x="${left}" y="${top}" width="${w}" height="${h}" rx="5" fill="#f0f6f8" stroke="#b7ccd8"/><text x="${left}" y="${top - 7}" font-size="11" fill="#627d98">Y · ${number(height)} м</text><text x="${left}" y="${top + h + 20}" font-size="11" fill="#627d98">0</text><text x="${left + w}" y="${top + h + 20}" text-anchor="end" font-size="11" fill="#627d98">X · ${number(width)} м</text>`;
+        return {point, markup};
+      }
       function download(content, filename, type) {
         const url = URL.createObjectURL(new Blob([content], {type}));
         const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
@@ -539,3 +570,4 @@ WORKSPACE_SCRIPT = r'''
 WORKSPACE_STYLES += METHODS_STYLES
 WORKSPACE_PANELS = WORKSPACE_PANELS.replace('__PRELIMINARY_METHODS__', PRELIMINARY_METHODS_HTML).replace('__FIELD_METHODS__', FIELD_METHODS_HTML)
 WORKSPACE_SCRIPT = WORKSPACE_SCRIPT.replace('__METHODS_SCRIPT__', METHODS_SCRIPT)
+WORKSPACE_SCRIPT = WORKSPACE_SCRIPT.replace('__PRELIMINARY_SCRIPT__', PRELIMINARY_SCRIPT)

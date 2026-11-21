@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .expedition_view import WORKSPACE_PANELS, WORKSPACE_SCRIPT, WORKSPACE_STYLES, WORKSPACE_TABS
+from .observation_models import EXTRA_TABLE_FIELDS, prepare_preliminary_survey
 
 HTML_TEMPLATE = r'''<!doctype html>
 <html lang="ru">
@@ -222,6 +223,7 @@ HTML_TEMPLATE = r'''<!doctype html>
     const MAP_DATA = __MAP_DATA__;
     const OBSERVATION_DATA = __OBSERVATION_DATA__;
     const RECOGNITION_DATA = __RECOGNITION_DATA__;
+    const PRELIMINARY_PLAN = __PRELIMINARY_PLAN__;
 
     const canvas = document.getElementById('mapCanvas');
     const ctx = canvas.getContext('2d');
@@ -986,13 +988,25 @@ HTML_TEMPLATE = r'''<!doctype html>
 
 
 def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[str, Any] | None = None,
-                 recognition: dict[str, Any] | None = None) -> Path:
+                 recognition: dict[str, Any] | None = None, observation_config: dict[str, Any] | None = None,
+                 observation_seed: int | None = None) -> Path:
     """Create an offline workspace for truth, surveys, fieldwork, recognition and comparison."""
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     embedded = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     public_observations = json.dumps(observations, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
     public_recognition = json.dumps(recognition, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
+    if observation_config is None and observations is None:
+        config_path = Path(__file__).resolve().parents[2] / "config/observations.json"
+        observation_config = json.loads(config_path.read_text(encoding="utf-8"))
+    preliminary_plan = None
+    if observation_config is not None:
+        seed = data.get("seed", 0) if observation_seed is None else observation_seed
+        preliminary_plan = prepare_preliminary_survey(data, observation_config, seed)
+        preliminary_plan["table_fields"] = {
+            name: EXTRA_TABLE_FIELDS[name] for name in ("geophysical_observations", "terrain_observations", "outcrop_observations")
+        }
+    embedded_plan = json.dumps(preliminary_plan, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
     replacements = {
         "__WORKSPACE_STYLES__": WORKSPACE_STYLES,
         "__WORKSPACE_TABS__": WORKSPACE_TABS,
@@ -1002,7 +1016,7 @@ def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[s
     html = re.sub("|".join(replacements), lambda match: replacements[match.group()], HTML_TEMPLATE)
     # Insert each JSON literal once; strings inside the payload are never templates.
     data_replacements = {"__OBSERVATION_DATA__": public_observations, "__RECOGNITION_DATA__": public_recognition,
-                         "__MAP_DATA__": embedded}
+                         "__MAP_DATA__": embedded, "__PRELIMINARY_PLAN__": embedded_plan}
     html = re.sub("|".join(data_replacements), lambda match: data_replacements[match.group()], html)
     output_path.write_text(html, encoding="utf-8")
     return output_path

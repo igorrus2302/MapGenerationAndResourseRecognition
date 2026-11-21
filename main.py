@@ -105,7 +105,8 @@ def main() -> None:
                     "observation_config": observation_config}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    viewer_path = build_viewer(data, args.output / "map_view.html", observations=observations, recognition=recognition)
+    viewer_path = build_viewer(data, args.output / "map_view.html", observations=observations, recognition=recognition,
+                               observation_config=observation_config, observation_seed=observation_seed)
 
     dimensions = data["dimensions"]
     statistics = data["statistics"]

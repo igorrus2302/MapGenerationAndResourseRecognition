@@ -338,24 +338,69 @@ def _surface_observations(truth: dict[str, Any], config: dict[str, Any], seed: i
     return unavailable
 
 
-def _outcrop_observations(truth: dict[str, Any], config: dict[str, Any], seed: int,
-                          sampler: TruthSampler, append: Callable) -> None:
-    settings = config["outcrops"]
+def prepare_preliminary_survey(truth: dict[str, Any], config: dict[str, Any], seed: int) -> dict[str, Any]:
+    """Prepare sampling coordinates and instrument errors for the same survey on both runtimes."""
+    dimensions = truth["dimensions"]
+    ideal = config.get("ideal", False)
+    methods = {}
+    if _enabled(config, "geophysical_survey") and "geophysics" in truth:
+        settings = config["geophysical_survey"]
+        position_sigma = 0 if ideal else settings.get("position_sigma_m", 0)
+        uncertainties = {sigma: 0 if ideal else settings.get(sigma, 0) for _, sigma in CHANNELS.values()}
+        points = _survey_positions(dimensions, {"point_count": settings["point_count"]}, seed, "GEO",
+                                   "geophysics-position", position_sigma)
+        for point in points:
+            point["field_errors"] = {
+                field: _rng(seed, "geophysics", point["observation_id"], method).gauss(0, uncertainties[sigma])
+                for method, (field, sigma) in CHANNELS.items()
+            }
+        methods["geophysical_survey"] = {"points": points, "position_uncertainty_m": position_sigma, **uncertainties}
+    if _enabled(config, "terrain_survey"):
+        settings = {**TERRAIN_SURVEY_DEFAULTS, **config["terrain_survey"]}
+        count = settings["point_count"]
+        columns, rows = surface_grid_shape(dimensions, count)
+        sigma = 0 if ideal else settings["elevation_sigma_m"]
+        points = _survey_positions(dimensions, {"point_count": count}, seed, "TER", "terrain-position", 0)
+        for point in points:
+            point["elevation_error_m"] = _rng(seed, "terrain-elevation", point["observation_id"]).gauss(0, sigma) if sigma else 0
+        methods["terrain_survey"] = {
+            "points": points, "columns": columns, "rows": rows, "elevation_uncertainty_m": sigma,
+            "slope_threshold_deg": settings["slope_threshold_deg"],
+            "local_relief_threshold_m": settings["local_relief_threshold_m"],
+        }
+    if _enabled(config, "outcrops"):
+        settings = config["outcrops"]
+        sigma = 0 if ideal else settings.get("position_sigma_m", 0)
+        points = _survey_positions(dimensions, settings, seed, "OUT", "outcrop-position", sigma)
+        methods["outcrops"] = {"points": points, "position_uncertainty_m": sigma}
+    return {"campaign_id": config["campaign_id"], "date": config["date"], "methods": methods}
+
+
+def _survey_positions(dimensions, settings, seed, prefix, error_key, sigma):
+    points = []
+    for index, point in enumerate(_surface_points(dimensions, settings, seed), 1):
+        identifier = f"{prefix}-{index:04d}"
+        x, y = point["x_m"], point["y_m"]
+        rng = _rng(seed, error_key, identifier) if sigma else None
+        offset_x, offset_y = (rng.gauss(0, sigma), rng.gauss(0, sigma)) if rng else (0, 0)
+        points.append({"observation_id": identifier, "position": [x, y],
+                       "x_m": round(x + offset_x, 6), "y_m": round(y + offset_y, 6)})
+    return points
+
+
+def _outcrop_observations(truth: dict[str, Any], plan: dict[str, Any], sampler: TruthSampler, append: Callable) -> None:
+    settings = plan["methods"]["outcrops"]
     names = {rock["id"]: rock["name"] for rock in truth["rocks"]}
     cover = truth.get("terrain", {}).get("surface_cover_rock_id", "soil")
-    sigma = 0 if config.get("ideal") else settings.get("position_sigma_m", 0)
-    for index, point in enumerate(_surface_points(truth["dimensions"], settings, seed), 1):
-        x, y = point["x_m"], point["y_m"]
-        cell = sampler.column(x, y)
+    for point in settings["points"]:
+        cell = sampler.column(*point["position"])
         rock = cell["intervals"][0]["rock_id"]
         if rock == cover:
             continue
-        identifier = f"OUT-{index:04d}"
-        rng = _rng(seed, "outcrop-position", identifier)
-        append("outcrop_observations", observation_id=identifier, x_m=round(x + rng.gauss(0, sigma), 6),
-               y_m=round(y + rng.gauss(0, sigma), 6), surface_elevation_m=cell.get("surface_elevation_m", 0),
+        append("outcrop_observations", observation_id=point["observation_id"], x_m=point["x_m"], y_m=point["y_m"],
+               surface_elevation_m=cell.get("surface_elevation_m", 0),
                observed_rock_id=rock, observed_rock_name=names[rock], observation_method="surface_mapping",
-               position_uncertainty_m=sigma, survey_date=config["date"])
+               position_uncertainty_m=settings["position_uncertainty_m"], survey_date=plan["date"])
 
 
 def _terrain_morphology(elevations: dict[tuple[int, int], float], column: int, row: int,
@@ -384,25 +429,18 @@ def _terrain_morphology(elevations: dict[tuple[int, int], float], column: int, r
     return slope, local_relief
 
 
-def _terrain_observations(config: dict[str, Any], seed: int, sampler: TruthSampler, append: Callable) -> None:
-    settings = {**TERRAIN_SURVEY_DEFAULTS, **config["terrain_survey"]}
+def _terrain_observations(plan: dict[str, Any], sampler: TruthSampler, append: Callable) -> None:
+    settings = plan["methods"]["terrain_survey"]
     dimensions = sampler.dimensions
-    columns, rows = surface_grid_shape(dimensions, settings["point_count"])
-    dx_m, dy_m = dimensions["width_m"] / columns, dimensions["height_m"] / rows
-    sigma = 0 if config.get("ideal") else settings["elevation_sigma_m"]
-    points = []
+    columns = settings["columns"]
+    dx_m, dy_m = dimensions["width_m"] / columns, dimensions["height_m"] / settings["rows"]
+    points = settings["points"]
     elevations = {}
-    grid = _surface_points(dimensions, {"point_count": settings["point_count"]}, seed)
-    for index, point in enumerate(grid):
-        identifier = f"TER-{index + 1:04d}"
-        x, y = round(point["x_m"], 6), round(point["y_m"], 6)
-        elevation = sampler.column(point["x_m"], point["y_m"]).get("surface_elevation_m", 0)
-        noise = _rng(seed, "terrain-elevation", identifier).gauss(0, sigma) if sigma else 0
+    for index, point in enumerate(points):
+        elevation = sampler.column(*point["position"]).get("surface_elevation_m", 0)
+        elevations[index % columns, index // columns] = round(elevation + point["elevation_error_m"], 3)
+    for index, point in enumerate(points):
         grid_index = index % columns, index // columns
-        elevations[grid_index] = round(elevation + noise, 3)
-        points.append((identifier, x, y, grid_index))
-
-    for identifier, x, y, grid_index in points:
         slope, local_relief = _terrain_morphology(elevations, *grid_index, dx_m, dy_m)
         terrain_type = "flat"
         if slope is None:
@@ -415,42 +453,37 @@ def _terrain_observations(config: dict[str, Any], seed: int, sampler: TruthSampl
                 terrain_type = "hill"
             elif local_relief <= -threshold:
                 terrain_type = "depression"
-        append("terrain_observations", observation_id=identifier, x_m=x, y_m=y, surface_elevation_m=elevations[grid_index],
-               elevation_uncertainty_m=sigma, slope_deg=slope, local_relief_m=local_relief, terrain_type=terrain_type,
-               observation_method="grid_elevation_survey", survey_date=config["date"])
+        append("terrain_observations", observation_id=point["observation_id"], x_m=point["x_m"], y_m=point["y_m"],
+               surface_elevation_m=elevations[grid_index], elevation_uncertainty_m=settings["elevation_uncertainty_m"],
+               slope_deg=slope, local_relief_m=local_relief, terrain_type=terrain_type,
+               observation_method="grid_elevation_survey", survey_date=plan["date"])
 
 
-def _geophysical_observations(config: dict[str, Any], seed: int, sampler: TruthSampler, append: Callable) -> None:
-    settings = config["geophysical_survey"]
-    ideal = config.get("ideal", False)
-    position_sigma = 0 if ideal else settings.get("position_sigma_m", 0)
-    points = _surface_points(sampler.dimensions, {"point_count": settings["point_count"]}, seed)
-    for index, point in enumerate(points, 1):
-        identifier = f"GEO-{index:04d}"
-        cell = sampler.column(point["x_m"], point["y_m"])
-        rng = _rng(seed, "geophysics-position", identifier)
-        x_m = round(point["x_m"] + rng.gauss(0, position_sigma), 6)
-        y_m = round(point["y_m"] + rng.gauss(0, position_sigma), 6)
+def _geophysical_observations(plan: dict[str, Any], sampler: TruthSampler, append: Callable) -> None:
+    settings = plan["methods"]["geophysical_survey"]
+    for point in settings["points"]:
+        cell = sampler.column(*point["position"])
         measurements = {}
-        for method, (field, sigma_field) in CHANNELS.items():
-            sigma = 0 if ideal else settings.get(sigma_field, 0)
-            measured = cell["geophysical_fields"][field] + _rng(seed, "geophysics", identifier, method).gauss(0, sigma)
+        for method, (field, sigma) in CHANNELS.items():
+            measured = cell["geophysical_fields"][field] + point["field_errors"][field]
             measurements[field] = round(max(0, measured) if method == "gamma" else measured, 4)
-            measurements[sigma_field] = sigma
-        append("geophysical_observations", observation_id=identifier, x_m=x_m, y_m=y_m,
+            measurements[sigma] = settings[sigma]
+        append("geophysical_observations", observation_id=point["observation_id"], x_m=point["x_m"], y_m=point["y_m"],
                surface_elevation_m=cell.get("surface_elevation_m", 0), **measurements,
-               position_uncertainty_m=position_sigma, observation_method="ground_geophysical_survey", survey_date=config["date"])
+               position_uncertainty_m=settings["position_uncertainty_m"],
+               observation_method="ground_geophysical_survey", survey_date=plan["date"])
 
 
 def survey_preliminary(truth: dict[str, Any], config: dict[str, Any], seed: int,
                        sampler: TruthSampler, append: Callable) -> None:
     """Collect surface survey records before planning the field expedition."""
-    if _enabled(config, "geophysical_survey") and "geophysics" in truth:
-        _geophysical_observations(config, seed, sampler, append)
-    if _enabled(config, "terrain_survey"):
-        _terrain_observations(config, seed, sampler, append)
-    if _enabled(config, "outcrops"):
-        _outcrop_observations(truth, config, seed, sampler, append)
+    plan = prepare_preliminary_survey(truth, config, seed)
+    if "geophysical_survey" in plan["methods"]:
+        _geophysical_observations(plan, sampler, append)
+    if "terrain_survey" in plan["methods"]:
+        _terrain_observations(plan, sampler, append)
+    if "outcrops" in plan["methods"]:
+        _outcrop_observations(truth, plan, sampler, append)
 
 
 def _trench_observations(truth: dict[str, Any], config: dict[str, Any], seed: int,
