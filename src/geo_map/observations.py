@@ -14,7 +14,7 @@ from typing import Any
 from .boreholes import collar_bounds, orientation, validate_trajectory
 from .drilling_plan import DEFAULT_RANDOM_FRACTION, target_boreholes
 from .observation_tools import TruthSampler, _number, _rng, measure_grade
-from .observation_models import EXTRA_TABLE_FIELDS, extend_campaign, survey_geophysics, validate_extensions
+from .observation_models import EXTRA_TABLE_FIELDS, extend_campaign, survey_preliminary, validate_extensions
 from .observation_objects import save_observation_objects
 from .observation_sources import BOREHOLE_SOURCE_TABLES, describe_borehole_sources, make_borehole_source
 
@@ -167,7 +167,7 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
         row.update(values)
         tables[table].append(row)
 
-    survey_geophysics(truth_map, config, seed, sampler, append)
+    survey_preliminary(truth_map, config, seed, sampler, append)
     drilling = config["drilling"]
     holes = _plan_holes(dimensions, drilling, seed, geophysical_rows=tables["geophysical_observations"])
     step = drilling["sample_length_m"]

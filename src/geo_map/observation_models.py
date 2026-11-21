@@ -338,8 +338,9 @@ def _surface_observations(truth: dict[str, Any], config: dict[str, Any], seed: i
     return unavailable
 
 
-def _outcrop_observations(truth: dict[str, Any], config: dict[str, Any], seed: int, append: Callable) -> None:
-    settings, sampler = config["outcrops"], TruthSampler(truth)
+def _outcrop_observations(truth: dict[str, Any], config: dict[str, Any], seed: int,
+                          sampler: TruthSampler, append: Callable) -> None:
+    settings = config["outcrops"]
     names = {rock["id"]: rock["name"] for rock in truth["rocks"]}
     cover = truth.get("terrain", {}).get("surface_cover_rock_id", "soil")
     sigma = 0 if config.get("ideal") else settings.get("position_sigma_m", 0)
@@ -383,9 +384,9 @@ def _terrain_morphology(elevations: dict[tuple[int, int], float], column: int, r
     return slope, local_relief
 
 
-def _terrain_observations(truth: dict[str, Any], config: dict[str, Any], seed: int, append: Callable) -> None:
+def _terrain_observations(config: dict[str, Any], seed: int, sampler: TruthSampler, append: Callable) -> None:
     settings = {**TERRAIN_SURVEY_DEFAULTS, **config["terrain_survey"]}
-    dimensions, sampler = truth["dimensions"], TruthSampler(truth)
+    dimensions = sampler.dimensions
     columns, rows = surface_grid_shape(dimensions, settings["point_count"])
     dx_m, dy_m = dimensions["width_m"] / columns, dimensions["height_m"] / rows
     sigma = 0 if config.get("ideal") else settings["elevation_sigma_m"]
@@ -419,14 +420,11 @@ def _terrain_observations(truth: dict[str, Any], config: dict[str, Any], seed: i
                observation_method="grid_elevation_survey", survey_date=config["date"])
 
 
-def survey_geophysics(truth: dict[str, Any], config: dict[str, Any], seed: int,
-                      sampler: TruthSampler, append: Callable) -> None:
-    if not _enabled(config, "geophysical_survey") or "geophysics" not in truth:
-        return
+def _geophysical_observations(config: dict[str, Any], seed: int, sampler: TruthSampler, append: Callable) -> None:
     settings = config["geophysical_survey"]
     ideal = config.get("ideal", False)
     position_sigma = 0 if ideal else settings.get("position_sigma_m", 0)
-    points = _surface_points(truth["dimensions"], {"point_count": settings["point_count"]}, seed)
+    points = _surface_points(sampler.dimensions, {"point_count": settings["point_count"]}, seed)
     for index, point in enumerate(points, 1):
         identifier = f"GEO-{index:04d}"
         cell = sampler.column(point["x_m"], point["y_m"])
@@ -442,6 +440,17 @@ def survey_geophysics(truth: dict[str, Any], config: dict[str, Any], seed: int,
         append("geophysical_observations", observation_id=identifier, x_m=x_m, y_m=y_m,
                surface_elevation_m=cell.get("surface_elevation_m", 0), **measurements,
                position_uncertainty_m=position_sigma, observation_method="ground_geophysical_survey", survey_date=config["date"])
+
+
+def survey_preliminary(truth: dict[str, Any], config: dict[str, Any], seed: int,
+                       sampler: TruthSampler, append: Callable) -> None:
+    """Collect surface survey records before planning the field expedition."""
+    if _enabled(config, "geophysical_survey") and "geophysics" in truth:
+        _geophysical_observations(config, seed, sampler, append)
+    if _enabled(config, "terrain_survey"):
+        _terrain_observations(config, seed, sampler, append)
+    if _enabled(config, "outcrops"):
+        _outcrop_observations(truth, config, seed, sampler, append)
 
 
 def _trench_observations(truth: dict[str, Any], config: dict[str, Any], seed: int,
@@ -644,10 +653,6 @@ def extend_campaign(truth: dict[str, Any], config: dict[str, Any], seed: int, ho
         _fault_observations(truth, config, seed, holes, append)
     if _enabled(config, "surface_geochemistry"):
         unavailable_soil = _surface_observations(truth, config, seed, sources, append)
-    if _enabled(config, "outcrops"):
-        _outcrop_observations(truth, config, seed, append)
-    if _enabled(config, "terrain_survey"):
-        _terrain_observations(truth, config, seed, append)
     if _enabled(config, "trenches"):
         missing_trench_samples = _trench_observations(truth, config, seed, sources, append)
     if _enabled(config, "quality_control"):

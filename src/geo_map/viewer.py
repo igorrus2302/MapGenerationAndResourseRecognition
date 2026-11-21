@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .expedition_view import EXPEDITION_PANEL, WORKSPACE_SCRIPT, WORKSPACE_STYLES, WORKSPACE_TABS
+from .expedition_view import WORKSPACE_PANELS, WORKSPACE_SCRIPT, WORKSPACE_STYLES, WORKSPACE_TABS
 
 HTML_TEMPLATE = r'''<!doctype html>
 <html lang="ru">
@@ -217,7 +217,7 @@ HTML_TEMPLATE = r'''<!doctype html>
     </main>
   </div>
 
-  __EXPEDITION_PANEL__
+  __WORKSPACE_PANELS__
   <script>
     const MAP_DATA = __MAP_DATA__;
     const OBSERVATION_DATA = __OBSERVATION_DATA__;
@@ -987,7 +987,7 @@ HTML_TEMPLATE = r'''<!doctype html>
 
 def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[str, Any] | None = None,
                  recognition: dict[str, Any] | None = None) -> Path:
-    """Create an offline workspace for truth, expedition, recognition and comparison."""
+    """Create an offline workspace for truth, surveys, fieldwork, recognition and comparison."""
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     embedded = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
@@ -996,7 +996,7 @@ def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[s
     replacements = {
         "__WORKSPACE_STYLES__": WORKSPACE_STYLES,
         "__WORKSPACE_TABS__": WORKSPACE_TABS,
-        "__EXPEDITION_PANEL__": EXPEDITION_PANEL,
+        "__WORKSPACE_PANELS__": WORKSPACE_PANELS,
         "__WORKSPACE_SCRIPT__": WORKSPACE_SCRIPT,
     }
     html = re.sub("|".join(replacements), lambda match: replacements[match.group()], HTML_TEMPLATE)

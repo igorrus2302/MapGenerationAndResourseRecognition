@@ -203,12 +203,12 @@ class ObservationTests(unittest.TestCase):
             with (tables_dir / "boreholes/structural_observations.csv").open(encoding="utf-8") as stream:
                 self.assertEqual(next(csv.DictReader(stream))["strike_deg"], "")
 
-    def test_viewer_has_four_tabs_and_safe_embedded_observations(self) -> None:
+    def test_viewer_has_five_tabs_and_safe_embedded_observations(self) -> None:
         self.config["title"] = '</script><script>alert(1)</script> __MAP_DATA__'
         bundle = generate_observations(self.truth, self.config, seed=7)
         with tempfile.TemporaryDirectory() as directory:
             html = build_viewer(self.truth, Path(directory) / "viewer.html", observations=bundle).read_text()
-            for panel in ("truthPanel", "expeditionPanel", "recognizedPanel", "similarityPanel"):
+            for panel in ("truthPanel", "preliminaryPanel", "expeditionPanel", "recognizedPanel", "similarityPanel"):
                 self.assertIn(f'id="{panel}"', html)
             self.assertIn("Результаты поиска ещё не загружены", html)
             self.assertNotIn('<script>alert(1)</script>', html)

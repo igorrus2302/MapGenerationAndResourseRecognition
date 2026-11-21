@@ -1,6 +1,6 @@
 """Offline workspace tabs and views that render only public expedition records."""
 
-from .expedition_methods_view import METHODS_HTML, METHODS_SCRIPT, METHODS_STYLES
+from .expedition_methods_view import FIELD_METHODS_HTML, METHODS_SCRIPT, METHODS_STYLES, PRELIMINARY_METHODS_HTML
 
 WORKSPACE_STYLES = r'''
     .workspace-tabs { height: 62px; display: flex; align-items: stretch; gap: 5px; padding: 8px 22px 0; background: white; border-bottom: 1px solid var(--line); }
@@ -57,6 +57,10 @@ WORKSPACE_STYLES = r'''
     .empty-card { width: min(540px, 100%); padding: 36px; background: white; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 12px 40px #102a4308; }
     .empty-card h2 { font-size: 24px; color: var(--navy); margin: 18px 0 10px; }
     .empty-card p { color: var(--muted); line-height: 1.7; }
+    @media (max-width: 1050px) {
+      .workspace-tab { padding-inline: 12px; }
+      .tab-number { display: none; }
+    }
     @media (max-width: 1000px) {
       .expedition-grid { grid-template-columns: 1fr; }
     }
@@ -64,13 +68,12 @@ WORKSPACE_STYLES = r'''
       .layout { height: auto; }
       .workspace-tabs { padding-left: 6px; padding-right: 6px; gap: 0; height: auto; min-height: 56px; }
       .workspace-tab { font-size: 11px; padding: 9px 8px; flex: 1; justify-content: center; gap: 5px; }
-      .tab-number { display: none; }
       .workspace-page { height: auto; min-height: calc(100dvh - 140px); padding: 16px; overflow: visible; }
       .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .expedition-heading { align-items: flex-start; flex-direction: column; }
       .table-footer { align-items: flex-start; flex-direction: column; }
     }
-    @media (max-width: 480px) {
+    @media (max-width: 640px) {
       .workspace-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 '''
@@ -78,19 +81,38 @@ WORKSPACE_STYLES = r'''
 WORKSPACE_TABS = r'''
   <nav class="workspace-tabs" role="tablist" aria-label="Этапы исследования">
     <button class="workspace-tab" id="tab-truth" role="tab" aria-controls="truthPanel" aria-selected="true" data-workspace="truth"><span class="tab-number">01</span>Истинная карта</button>
-    <button class="workspace-tab" id="tab-expedition" role="tab" aria-controls="expeditionPanel" aria-selected="false" tabindex="-1" data-workspace="expedition"><span class="tab-number">02</span>Разведочная экспедиция</button>
-    <button class="workspace-tab" id="tab-recognized" role="tab" aria-controls="recognizedPanel" aria-selected="false" tabindex="-1" data-workspace="recognized"><span class="tab-number">03</span>Распознанная карта</button>
-    <button class="workspace-tab" id="tab-similarity" role="tab" aria-controls="similarityPanel" aria-selected="false" tabindex="-1" data-workspace="similarity"><span class="tab-number">04</span>Оценка сходства</button>
+    <button class="workspace-tab" id="tab-preliminary" role="tab" aria-controls="preliminaryPanel" aria-selected="false" tabindex="-1" data-workspace="preliminary"><span class="tab-number">02</span>Предварительные наблюдения</button>
+    <button class="workspace-tab" id="tab-expedition" role="tab" aria-controls="expeditionPanel" aria-selected="false" tabindex="-1" data-workspace="expedition"><span class="tab-number">03</span>Разведочная экспедиция</button>
+    <button class="workspace-tab" id="tab-recognized" role="tab" aria-controls="recognizedPanel" aria-selected="false" tabindex="-1" data-workspace="recognized"><span class="tab-number">04</span>Распознанная карта</button>
+    <button class="workspace-tab" id="tab-similarity" role="tab" aria-controls="similarityPanel" aria-selected="false" tabindex="-1" data-workspace="similarity"><span class="tab-number">05</span>Оценка сходства</button>
   </nav>
 '''
 
-EXPEDITION_PANEL = r'''
+WORKSPACE_PANELS = r'''
+  <section id="preliminaryPanel" class="workspace-page hidden" role="tabpanel" aria-labelledby="tab-preliminary">
+    <div id="preliminaryEmpty" class="empty-card"><h2>Нет предварительных наблюдений</h2><p>Здесь появятся данные съёмки, выполненной до бурения и отбора проб.</p></div>
+    <div id="preliminaryContent" class="hidden">
+      <div class="expedition-heading">
+        <div><h2>Предварительные наблюдения</h2><p>Данные съёмки участка до бурения и отбора проб.</p></div>
+      </div>
+      <div class="method-sections" id="preliminarySections" aria-label="Виды предварительных наблюдений"></div>
+      __PRELIMINARY_METHODS__
+      <div class="panel-card">
+        <div class="data-heading">
+          <div><h3 id="preliminaryDataTitle"></h3><span id="preliminaryCount" class="muted" aria-live="polite"></span></div>
+          <div class="data-downloads"><button id="downloadPreliminaryGeoJson">Скачать GeoJSON</button><button id="downloadPreliminaryCsv">CSV всей таблицы</button></div>
+        </div>
+        <div class="table-scroll"><table class="observation-table"><thead id="preliminaryTableHead"></thead><tbody id="preliminaryTableBody"></tbody></table></div>
+        <div class="table-footer"><span id="preliminaryPageInfo" aria-live="polite"></span><div class="page-buttons"><button id="preliminaryPrevious">← Назад</button><button id="preliminaryNext">Далее →</button></div></div>
+      </div>
+    </div>
+  </section>
   <section id="expeditionPanel" class="workspace-page hidden" role="tabpanel" aria-labelledby="tab-expedition">
     <div id="expeditionEmpty" class="empty-card hidden"><h2>Экспедиция ещё не создана</h2><p>Наблюдения появятся после генерации разведочной экспедиции.</p></div>
     <div id="expeditionContent">
       <div class="expedition-heading">
         <div><h2 id="expeditionTitle"></h2><p id="expeditionSubtitle"></p></div>
-        <button id="downloadObservations" class="primary-button">Скачать все наблюдения · JSON</button>
+        <button id="downloadObservations" class="primary-button">Скачать оба этапа · JSON</button>
       </div>
       <div class="metric-grid" id="expeditionMetrics"></div>
       <div class="method-sections" id="expeditionSections" aria-label="Виды разведочных наблюдений"></div>
@@ -109,7 +131,7 @@ EXPEDITION_PANEL = r'''
           <div class="muted" id="holeTrajectoryCaption"></div>
         </div>
       </div>
-      __METHOD_OVERVIEWS__
+      __FIELD_METHODS__
       <div class="panel-card">
         <div class="data-heading"><div><h3 id="dataSectionTitle">Данные экспедиции</h3><div class="muted">Наблюдения и измерения выбранного раздела</div></div><div class="data-downloads"><button id="downloadMethodGeoJson" class="hidden">Скачать GeoJSON</button><button id="downloadDrillingSource" class="hidden">Скачать источник · JSON</button><button id="downloadObservationCsv">CSV всей таблицы</button></div></div>
         <div class="data-tabs" id="observationTabs"></div>
@@ -156,10 +178,17 @@ EXPEDITION_PANEL = r'''
 WORKSPACE_SCRIPT = r'''
     (() => {
       const tabs = [...document.querySelectorAll('.workspace-tab')];
-      const panels = {truth: 'truthPanel', expedition: 'expeditionPanel', recognized: 'recognizedPanel', similarity: 'similarityPanel'};
-      const truthStats = document.getElementById('headerStats').innerHTML;
+      const panels = {truth: 'truthPanel', preliminary: 'preliminaryPanel', expedition: 'expeditionPanel', recognized: 'recognizedPanel', similarity: 'similarityPanel'};
+      const summary = OBSERVATION_DATA?.summary;
+      const stats = {
+        truth: document.getElementById('headerStats').innerHTML,
+        preliminary: '<span>Съёмка до бурения</span>',
+        expedition: summary ? `<span>${summary.hole_count} скважин</span><span>${summary.total_sample_count ?? summary.sample_count} полевых проб</span>` : '<span>Полевые наблюдения</span>',
+        recognized: '<span>Поиск по наблюдениям</span>',
+        similarity: '<span>Сравнение карт</span>'
+      };
       function activate(name) {
-        if (!panels[name]) name = 'truth';
+        if (!Object.hasOwn(panels, name)) name = 'truth';
         for (const [key, id] of Object.entries(panels)) document.getElementById(id).classList.toggle('hidden', key !== name);
         for (const tab of tabs) {
           const selected = tab.dataset.workspace === name;
@@ -167,9 +196,7 @@ WORKSPACE_SCRIPT = r'''
           tab.tabIndex = selected ? 0 : -1;
         }
         if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
-        document.getElementById('headerStats').innerHTML = name === 'truth' ? truthStats : name === 'expedition' && OBSERVATION_DATA
-          ? `<span>${OBSERVATION_DATA.summary.hole_count} скважин</span><span>${OBSERVATION_DATA.summary.total_sample_count ?? OBSERVATION_DATA.summary.sample_count} полевых проб</span>`
-          : name === 'similarity' ? '<span>Сравнение карт</span>' : '<span>Поиск по наблюдениям</span>';
+        document.getElementById('headerStats').innerHTML = stats[name];
         if (name === 'truth') requestAnimationFrame(resizeCanvas);
       }
       for (const button of document.querySelectorAll('[data-workspace]')) button.addEventListener('click', () => activate(button.dataset.workspace));
@@ -232,7 +259,7 @@ WORKSPACE_SCRIPT = r'''
       const pageSize = 50;
       const summary = observations.summary;
       element('expeditionTitle').textContent = observations.campaign.title;
-      element('expeditionSubtitle').textContent = `${observations.campaign.campaign_id} · ${observations.campaign.date} · комплекс разведочных наблюдений`;
+      element('expeditionSubtitle').textContent = `${observations.campaign.campaign_id} · ${observations.campaign.date} · бурение, полевые пробы и лабораторные анализы`;
       element('expeditionMetrics').innerHTML = [[summary.hole_count, 'скважин'], [`${number(summary.drilled_m)} м`, 'пройдено бурением'], [number(summary.total_sample_count ?? summary.sample_count), 'полевых проб всех методов'], [number(summary.total_assay_count ?? summary.assay_count), 'результатов полевых проб']].map(([value, label]) => `<div class="metric-card"><strong>${escape(value)}</strong><span>${label}</span></div>`).join('');
       const options = holes.map(hole => `<option value="${escape(hole.hole_id)}">${escape(hole.hole_id)}</option>`).join('');
       element('observationHoleFilter').innerHTML = '<option value="">Все скважины</option>' + options;
@@ -250,13 +277,19 @@ WORKSPACE_SCRIPT = r'''
         const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
+      function downloadCsv(fields, rows, filename) {
+        const quote = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
+        const lines = [fields, ...rows.map(row => fields.map(field => row[field]))];
+        download(lines.map(row => row.map(quote).join(',')).join('\r\n') + '\r\n', filename, 'text/csv;charset=utf-8');
+      }
+      function downloadGeoJson(name) {
+        if (name && observations.geojson?.[name]) download(JSON.stringify(observations.geojson[name], null, 2), `${name}.geojson`, 'application/geo+json');
+      }
       element('downloadObservations').addEventListener('click', () => download(JSON.stringify(observations, null, 2), 'observations.json', 'application/json'));
       element('downloadObservationCsv').addEventListener('click', () => {
         const fields = observations.table_fields[activeTable];
-        const quote = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
         const source = sourceByKind.get(element('observationSourceFilter').value);
-        const rows = [fields, ...sourceRows(activeTable).map(row => fields.map(field => row[field]))];
-        download(rows.map(row => row.map(quote).join(',')).join('\r\n') + '\r\n', `${source ? source.kind + '_' : ''}${activeTable}.csv`, 'text/csv;charset=utf-8');
+        downloadCsv(fields, sourceRows(activeTable), `${source ? source.kind + '_' : ''}${activeTable}.csv`);
       });
       function sourceRows(name) {
         const source = sourceByKind.get(element('observationSourceFilter').value);
@@ -464,7 +497,6 @@ WORKSPACE_SCRIPT = r'''
           (!fields.includes('analyte') || !analyteFilter || row.analyte === analyteFilter) &&
           (!fields.includes('sample_id') || !sampleFilter || row.sample_id.includes(sampleFilter)) &&
           (activeTable !== 'quality_control' || !qcFilter || row.qc_flag === qcFilter));
-        page = Math.max(0, Math.min(page, Math.ceil(rows.length / pageSize) - 1));
         element('holeFilterLabel').classList.toggle('hidden', !fields.includes('hole_id'));
         element('sourceFilterLabel').classList.toggle('hidden', !fields.includes('hole_id') || !drillingSources.length);
         const sourceSelected = sourceByKind.has(element('observationSourceFilter').value);
@@ -474,16 +506,21 @@ WORKSPACE_SCRIPT = r'''
         element('analyteFilterLabel').classList.toggle('hidden', !fields.includes('analyte'));
         element('sampleFilterLabel').classList.toggle('hidden', !fields.includes('sample_id'));
         element('qcFilterLabel').classList.toggle('hidden', activeTable !== 'quality_control');
-        element('observationTableHead').innerHTML = '<tr>' + fields.map(field => `<th scope="col" title="${escape(field)}">${escape(fieldNames[field] || field)}</th>`).join('') + '</tr>';
-        element('observationTableBody').innerHTML = rows.slice(page * pageSize, (page + 1) * pageSize).map(row => '<tr>' + fields.map(field => {
+        page = renderObservationRows('observation', fields, rows, page, 'Нет наблюдений для выбранных фильтров');
+      }
+      function renderObservationRows(prefix, fields, rows, requestedPage, emptyMessage) {
+        const page = Math.max(0, Math.min(requestedPage, Math.ceil(rows.length / pageSize) - 1));
+        element(prefix + 'TableHead').innerHTML = '<tr>' + fields.map(field => `<th scope="col" title="${escape(field)}">${escape(fieldNames[field] || field)}</th>`).join('') + '</tr>';
+        element(prefix + 'TableBody').innerHTML = rows.slice(page * pageSize, (page + 1) * pageSize).map(row => '<tr>' + fields.map(field => {
           const value = row[field];
           const display = value === null || value === undefined || value === '' ? '—' : typeof value === 'number' ? number(value) : categoryNames[value] || value;
           return `<td>${escape(display)}</td>`;
-        }).join('') + '</tr>').join('') || `<tr><td colspan="${fields.length}">Нет наблюдений для выбранных фильтров</td></tr>`;
-        element('observationCount').textContent = `${number(rows.length)} записей`;
-        element('observationPageInfo').textContent = rows.length ? `${page * pageSize + 1}–${Math.min(rows.length, (page + 1) * pageSize)} из ${number(rows.length)} · пустые значения обозначены «—»` : 'Нет записей';
-        element('observationPrevious').disabled = page === 0;
-        element('observationNext').disabled = (page + 1) * pageSize >= rows.length;
+        }).join('') + '</tr>').join('') || `<tr><td colspan="${fields.length}">${emptyMessage}</td></tr>`;
+        element(prefix + 'Count').textContent = `${number(rows.length)} записей`;
+        element(prefix + 'PageInfo').textContent = rows.length ? `${page * pageSize + 1}–${Math.min(rows.length, (page + 1) * pageSize)} из ${number(rows.length)} · пустые значения обозначены «—»` : 'Нет записей';
+        element(prefix + 'Previous').disabled = page === 0;
+        element(prefix + 'Next').disabled = (page + 1) * pageSize >= rows.length;
+        return page;
       }
       element('observationHoleFilter').addEventListener('change', () => {
         page = 0;
@@ -500,5 +537,5 @@ WORKSPACE_SCRIPT = r'''
 '''
 
 WORKSPACE_STYLES += METHODS_STYLES
-EXPEDITION_PANEL = EXPEDITION_PANEL.replace('__METHOD_OVERVIEWS__', METHODS_HTML)
+WORKSPACE_PANELS = WORKSPACE_PANELS.replace('__PRELIMINARY_METHODS__', PRELIMINARY_METHODS_HTML).replace('__FIELD_METHODS__', FIELD_METHODS_HTML)
 WORKSPACE_SCRIPT = WORKSPACE_SCRIPT.replace('__METHODS_SCRIPT__', METHODS_SCRIPT)
