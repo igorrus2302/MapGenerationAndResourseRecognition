@@ -62,6 +62,9 @@ const get = id => {
   assert.ok(nodes.has(id), `Missing element #${id}`);
   return nodes.get(id);
 };
+function clickMapPoint(map, attribute, identifier) {
+  get(map).fire('click', {target: {closest: selector => selector === `[data-${attribute}]` ? {dataset: {[attribute]: identifier}} : null}});
+}
 const blobs = [];
 const location = {hash: ''};
 const context = vm.createContext({
@@ -158,10 +161,14 @@ if (!observations) {
   assert.ok(!get('holeProfile').innerHTML.includes('NaN'));
   assert.match(get('holeProfile').innerHTML, /Вдоль ствола/);
   assert.ok(!get('holeTrajectory').innerHTML.includes('NaN'));
+  const collars = observations.tables.borehole_collars;
+  assert.equal(get('profileHole').value, collars[0]?.hole_id ?? '');
+  for (const hole of collars) assert.ok(get('profileHole').innerHTML.includes(`value="${hole.hole_id}"`));
   const inclined = observations.tables.borehole_collars.find(hole => hole.dip_deg !== -90);
   if (inclined) {
     get('observationHoleFilter').value = inclined.hole_id;
     get('observationHoleFilter').fire('change');
+    assert.equal(get('profileHole').value, inclined.hole_id);
     assert.match(get('surveyMap').innerHTML, new RegExp(`data-hole-trajectory="${inclined.hole_id}"`));
     assert.match(get('holeTrajectory').innerHTML, new RegExp(`data-borehole-path="${inclined.hole_id}"`));
     assert.match(get('holeProfileCaption').textContent, /угол.*азимут/);
@@ -169,8 +176,12 @@ if (!observations) {
     assert.ok(get('holeTrajectoryCaption').textContent.includes(depth.toLocaleString('ru-RU', {maximumFractionDigits: 8})));
   }
   const lastHole = observations.tables.borehole_collars.at(-1).hole_id;
-  get('observationHoleFilter').value = lastHole;
-  get('observationHoleFilter').fire('change');
+  get('profileHole').value = lastHole;
+  get('profileHole').fire('change');
+  assert.equal(get('observationHoleFilter').value, lastHole);
+  assert.match(get('holeTrajectory').innerHTML, new RegExp(`data-borehole-path="${lastHole}"`));
+  assert.ok(get('surveyMap').innerHTML.includes(`aria-pressed="true" data-hole="${lastHole}"`));
+  assert.equal(get('observationCount').textContent, '1 записей');
   const drillingTargets = observations.drilling_targets || {};
   const placementKey = get('surveyPlacementKey');
   assert.equal(placementKey.classList.contains('hidden'), observations.plan.layout !== 'hybrid');
@@ -191,7 +202,14 @@ if (!observations) {
     const gammaTab = get('observationTabs').children.find(button => button.textContent === 'Гамма-каротаж');
     gammaTab.click();
     assert.match(get('observationTableHead').innerHTML, /gamma_count_rate_cps/);
+    assert.equal(get('observationCount').textContent, `${gammaRows.length.toLocaleString('ru-RU')} записей`);
   }
+  clickMapPoint('surveyMap', 'hole', collars[0].hole_id);
+  assert.equal(get('profileHole').value, collars[0].hole_id);
+  assert.equal(get('observationHoleFilter').value, collars[0].hole_id);
+  assert.match(get('holeTrajectory').innerHTML, new RegExp(`data-borehole-path="${collars[0].hole_id}"`));
+  const firstGamma = (observations.tables.downhole_gamma || []).find(row => row.hole_id === collars[0].hole_id);
+  if (firstGamma) assert.ok(get('gammaProfile').innerHTML.includes(firstGamma.measurement_id));
   get('observationTabs').children[2].click();
   assert.match(get('observationTableHead').innerHTML, /Компонент/);
   assert.equal(get('analyteFilterLabel').classList.contains('hidden'), false);
@@ -234,6 +252,18 @@ if (!observations) {
     get('observationSampleFilter').fire('input');
     const count = observations.tables.surface_geochemistry.filter(row => row.sample_id === surfaceSample).length;
     assert.equal(get('observationCount').textContent, `${count} записей`);
+    assert.equal(get('surfaceSampleSelect').value, surfaceSample);
+    const lastSample = observations.tables.surface_geochemistry.at(-1).sample_id;
+    get('surfaceSampleSelect').value = lastSample;
+    get('surfaceSampleSelect').fire('change');
+    assert.equal(get('observationSampleFilter').value, lastSample);
+    assert.ok(get('surfaceSampleDetail').textContent.includes(lastSample));
+    assert.ok(get('surfaceMap').innerHTML.includes(`aria-pressed="true" data-sample="${lastSample}"`));
+    clickMapPoint('surfaceMap', 'sample', surfaceSample);
+    assert.equal(get('surfaceSampleSelect').value, surfaceSample);
+    get('surfaceSampleSelect').value = '';
+    get('surfaceSampleSelect').fire('change');
+    assert.equal(get('observationCount').textContent, `${observations.tables.surface_geochemistry.length.toLocaleString('ru-RU')} записей`);
   }
   get('downloadMethodGeoJson').click();
   get('expeditionSections').children[2].click();
@@ -245,6 +275,13 @@ if (!observations) {
     get('trenchSelect').value = identifier;
     get('trenchSelect').fire('change');
     assert.match(get('trenchCaption').textContent, new RegExp(identifier));
+    assert.equal(get('observationTrenchFilter').value, identifier);
+    const firstTrench = observations.tables.trenches[0].trench_id;
+    get('observationTrenchFilter').value = firstTrench;
+    get('observationTrenchFilter').fire('change');
+    assert.equal(get('trenchSelect').value, firstTrench);
+    clickMapPoint('trenchMap', 'trench', identifier);
+    assert.equal(get('trenchSelect').value, identifier);
     get('observationTabs').children[2].click();
     assert.equal(get('analyteFilterLabel').classList.contains('hidden'), false);
   }
@@ -263,16 +300,19 @@ if (!observations) {
     get('expeditionSections').children[0].click();
     get('observationSourceFilter').value = source.kind;
     get('observationSourceFilter').fire('change');
+    assert.equal(get('profileSource').value, source.kind);
     assert.equal(get('observationCount').textContent, `${source.summary.hole_count.toLocaleString('ru-RU')} записей`);
     assert.equal(get('downloadDrillingSource').classList.contains('hidden'), false);
     assert.equal(get('downloadObservationCsv').textContent, 'CSV источника');
     const ids = new Set(source.hole_ids);
     for (const hole of observations.tables.borehole_collars) {
       if (!ids.has(hole.hole_id)) {
+        assert.ok(!get('profileHole').innerHTML.includes(`value="${hole.hole_id}"`));
         assert.ok(!get('observationHoleFilter').innerHTML.includes(`value="${hole.hole_id}"`));
         assert.ok(!get('surveyMap').innerHTML.includes(`data-hole="${hole.hole_id}"`));
       }
     }
+    assert.equal(get('profileHole').disabled, !source.hole_ids.length);
     if (!source.hole_ids.length) assert.equal(get('holeProfileTitle').textContent, 'В этом источнике нет скважин');
     const index = blobs.length;
     get('downloadDrillingSource').click();
@@ -280,6 +320,12 @@ if (!observations) {
     sourceDownloads.push({source, index});
     get('observationTabs').children[2].click();
     assert.equal(get('observationCount').textContent, `${source.summary.assay_count.toLocaleString('ru-RU')} записей`);
+  }
+  if (observations.borehole_sources?.length) {
+    get('profileSource').value = '';
+    get('profileSource').fire('change');
+    assert.equal(get('observationSourceFilter').value, '');
+    for (const hole of collars) assert.ok(get('profileHole').innerHTML.includes(`value="${hole.hole_id}"`));
   }
   get('expeditionSections').children[1].click();
   assert.equal(get('observationSourceFilter').value, '');
@@ -310,6 +356,26 @@ if (!observations) {
   const fieldTable = get('observationTableHead').innerHTML;
   get('tab-preliminary').click();
   const selectSurvey = name => surveyButtons.find(button => button.dataset.method === name).click();
+  function checkPreliminarySelection(map, rows) {
+    const filter = get('preliminaryPointFilter');
+    assert.equal(filter.disabled, !rows.length);
+    if (!rows.length) return;
+    const last = rows.at(-1).observation_id;
+    assert.ok(filter.innerHTML.includes(`value="${last}"`));
+    filter.value = last;
+    filter.fire('change');
+    assert.equal(get('preliminaryCount').textContent, '1 записей');
+    assert.ok(get('preliminaryTableBody').innerHTML.includes(last));
+    assert.ok(get('preliminaryPointDetail').innerHTML.includes(last));
+    assert.ok(get(map).innerHTML.includes(`aria-pressed="true" data-observation="${last}"`));
+    const first = rows[0].observation_id;
+    clickMapPoint(map, 'observation', first);
+    assert.equal(filter.value, first);
+    assert.ok(get('preliminaryTableBody').innerHTML.includes(first));
+    filter.value = '';
+    filter.fire('change');
+    assert.equal(get('preliminaryCount').textContent, `${rows.length.toLocaleString('ru-RU')} записей`);
+  }
   const outcropDownload = blobs.length;
   if (hasOutcrops) {
     selectSurvey('outcrops');
@@ -317,6 +383,7 @@ if (!observations) {
     const outcrops = observations.tables.outcrop_observations;
     assert.ok(!get('outcropMap').innerHTML.includes('NaN'));
     assert.equal((get('outcropMap').innerHTML.match(/<circle/g) || []).length, outcrops.length);
+    checkPreliminarySelection('outcropMap', outcrops);
     get('downloadPreliminaryGeoJson').click();
   }
   const terrainDownload = blobs.length;
@@ -327,6 +394,7 @@ if (!observations) {
     assert.ok(!get('terrainSurveyMap').innerHTML.includes('NaN'));
     assert.equal((get('terrainSurveyMap').innerHTML.match(/<circle/g) || []).length, terrain.length);
     assert.match(get('preliminaryTableHead').innerHTML, /Тип рельефа/);
+    checkPreliminarySelection('terrainSurveyMap', terrain);
     get('downloadPreliminaryGeoJson').click();
   }
   const geophysicalDownloads = [];
@@ -340,6 +408,7 @@ if (!observations) {
     if (field.length) assert.match(get('geophysicalMap').innerHTML, magnetic ? /нТл/ : /имп\/с/);
     assert.match(get('preliminaryTableHead').innerHTML, magnetic ? /magnetic_anomaly_nt/ : /gamma_count_rate_cps/);
     assert.doesNotMatch(get('preliminaryTableHead').innerHTML, magnetic ? /gamma_count_rate_cps/ : /magnetic_anomaly_nt/);
+    checkPreliminarySelection('geophysicalMap', field);
     if (field.length > 50) {
       get('preliminaryNext').click();
       assert.match(get('preliminaryPageInfo').textContent, /^51/);
@@ -390,7 +459,17 @@ if (!observations) {
       const path = require('node:path');
       const folder = path.dirname(process.argv[2] || 'output/map/map_view.html');
       const savedSource = path.join(folder, 'observations', source.directory, 'observations.json');
-      if (fs.existsSync(savedSource)) assert.deepEqual(pack, JSON.parse(fs.readFileSync(savedSource, 'utf8')));
+      if (fs.existsSync(savedSource)) {
+        const saved = JSON.parse(fs.readFileSync(savedSource, 'utf8'));
+        // The viewer upgrades legacy combined survey bundles to 1.7, but
+        // leaves the archived source files and their original schema untouched.
+        if (saved.schema_version === '1.6' && pack.schema_version === '1.7') {
+          const archive = JSON.parse(fs.readFileSync(path.join(folder, 'observations', 'observations.json'), 'utf8'));
+          assert.ok(archive.tables.geophysical_observations);
+          saved.schema_version = '1.7';
+        }
+        assert.deepEqual(pack, saved);
+      }
     }
     console.log('Expedition views, recognition map, filters and JSON/CSV/GeoJSON downloads: OK');
   }).catch(error => { console.error(error); process.exitCode = 1; });

@@ -21,12 +21,15 @@ METHODS_STYLES = r'''
 
 FIELD_METHODS_HTML = r'''
       <div id="surfaceOverview" class="panel-card method-overview hidden">
-        <div class="method-toolbar"><div><h3>Поверхностная геохимия</h3><div class="muted" id="surfaceCaption"></div></div><select id="surfaceMapAnalyte" aria-label="Компонент поверхностной геохимии"></select></div>
+        <h3>Поверхностная геохимия</h3><div class="muted" id="surfaceCaption"></div>
+        <div class="selection-controls"><label>Почвенная проба<select id="surfaceSampleSelect"></select></label><label>Компонент<select id="surfaceMapAnalyte"></select></label></div>
         <svg id="surfaceMap" class="method-map" viewBox="0 0 650 300" role="group" aria-label="Измеренные содержания в почвенных пробах"></svg>
         <p id="surfaceMapLegend"></p>
+        <div id="surfaceSampleDetail" class="selection-detail" aria-live="polite"></div>
       </div>
       <div id="trenchOverview" class="panel-card method-overview hidden">
-        <div class="method-toolbar"><div><h3>Траншейные наблюдения</h3><div id="trenchCaption" class="muted"></div></div><select id="trenchSelect" aria-label="Выбранная траншея"></select></div>
+        <h3>Траншейные наблюдения</h3><div id="trenchCaption" class="muted" aria-live="polite"></div>
+        <div class="selection-controls"><label>Траншея<select id="trenchSelect"></select></label></div>
         <svg id="trenchMap" class="method-map" viewBox="0 0 650 300" role="group" aria-label="Положение наблюдённых траншей"></svg>
         <div class="method-toolbar"><h3>Описание дна и канавные пробы</h3><select id="trenchProfileAnalyte" aria-label="Компонент канавных проб"></select></div>
         <svg id="trenchProfile" class="method-profile" viewBox="0 0 700 180" role="img" aria-label="Наблюдённые породы и результаты проб вдоль траншеи"></svg>
@@ -44,21 +47,26 @@ FIELD_METHODS_HTML = r'''
 '''
 
 PRELIMINARY_METHODS_HTML = r'''
+      <div class="panel-card method-overview">
+        <h3>Просмотр отдельных наблюдений</h3>
+        <div class="selection-controls"><label>Точка наблюдения<select id="preliminaryPointFilter"></select></label></div>
+        <div id="preliminaryPointDetail" class="selection-detail" aria-live="polite"></div>
+      </div>
       <div id="outcropOverview" class="panel-card method-overview hidden">
         <h3>Наблюдённые обнажения</h3>
         <div class="muted" id="outcropCaption"></div>
-        <svg id="outcropMap" class="method-map" viewBox="0 0 650 300" role="img" aria-label="Точки наблюдения обнажений"></svg>
+        <svg id="outcropMap" class="method-map" viewBox="0 0 650 300" role="group" aria-label="Точки наблюдения обнажений"></svg>
       </div>
       <div id="terrainSurveyOverview" class="panel-card method-overview hidden">
         <h3>Типы рельефа по съёмке высот</h3>
         <div class="muted" id="terrainSurveyCaption"></div>
-        <svg id="terrainSurveyMap" class="method-map" viewBox="0 0 650 300" role="img" aria-label="Типы рельефа в точках съёмки"></svg>
+        <svg id="terrainSurveyMap" class="method-map" viewBox="0 0 650 300" role="group" aria-label="Типы рельефа в точках съёмки"></svg>
         <p id="terrainSurveyLegend"></p>
       </div>
       <div id="geophysicalOverview" class="panel-card method-overview hidden">
         <h3 id="geophysicalHeading"></h3>
         <div id="geophysicalCaption" class="muted"></div>
-        <svg id="geophysicalMap" class="method-map" viewBox="0 0 650 300" role="img" aria-label="Значения геофизической съёмки"></svg>
+        <svg id="geophysicalMap" class="method-map" viewBox="0 0 650 300" role="group" aria-label="Значения геофизической съёмки"></svg>
       </div>
 '''
 
@@ -87,22 +95,39 @@ METHODS_SCRIPT = r'''
           element(section.panel).classList.toggle('hidden', name !== key);
           sectionButtons[name].setAttribute('aria-pressed', String(name === key));
         }
-        for (const id of ['observationSourceFilter', 'observationHoleFilter', 'observationTrenchFilter', 'observationAnalyteFilter', 'observationSampleFilter', 'observationQcFilter']) element(id).value = '';
+        for (const id of ['observationSourceFilter', 'observationHoleFilter', 'observationTrenchFilter', 'observationAnalyteFilter', 'observationSampleFilter', 'observationQcFilter', 'surfaceSampleSelect']) element(id).value = '';
         updateSourceHoles();
+        if (key === 'surface') drawSurface();
         page = 0; buildTableTabs(sections[key].tables);
         element('dataSectionTitle').textContent = sections[key].label;
         element('downloadMethodGeoJson').classList.toggle('hidden', !sections[key].geojson);
         renderTable();
       }
       element('downloadMethodGeoJson').addEventListener('click', () => downloadGeoJson(sections[activeSection].geojson));
-      for (const id of ['observationTrenchFilter', 'observationQcFilter']) element(id).addEventListener('change', () => { page = 0; renderTable(); });
-      element('observationSampleFilter').addEventListener('input', () => { page = 0; renderTable(); });
+      element('observationQcFilter').addEventListener('change', () => { page = 0; renderTable(); });
+      element('observationTrenchFilter').addEventListener('change', () => {
+        const id = element('observationTrenchFilter').value;
+        if (id) selectTrench(id);
+        else { page = 0; renderTable(); }
+      });
+      element('observationSampleFilter').addEventListener('input', () => {
+        if (activeSection === 'surface') {
+          const id = element('observationSampleFilter').value.trim();
+          element('surfaceSampleSelect').value = surfaceSamples.has(id) ? id : '';
+          drawSurface();
+        }
+        page = 0; renderTable();
+      });
       element('observationTrenchFilter').innerHTML = '<option value="">Все траншеи</option>' + trenches.map(row => `<option value="${escape(row.trench_id)}">${escape(row.trench_id)}</option>`).join('');
 
       const surfaceAnalytes = observations.plan.methods?.surface_geochemistry?.analytes || [];
+      const surfaceSamples = new Map((tables.surface_geochemistry || []).map(row => [row.sample_id, row]));
+      element('surfaceSampleSelect').innerHTML = '<option value="">Все почвенные пробы</option>' + [...surfaceSamples.keys()].map(id => `<option value="${escape(id)}">${escape(id)}</option>`).join('');
+      element('surfaceSampleSelect').disabled = !surfaceSamples.size;
       element('surfaceMapAnalyte').innerHTML = surfaceAnalytes.map(item => `<option value="${escape(item.analyte)}">${escape(item.analyte)} · ${escape(item.unit)}</option>`).join('');
       function drawSurface() {
         const analyte = element('surfaceMapAnalyte').value;
+        const selected = element('surfaceSampleSelect').value;
         const rows = (tables.surface_geochemistry || []).filter(row => row.analyte === analyte);
         const values = rows.filter(row => row.result_qualifier !== 'lt').map(row => row.result_value);
         const minimum = values.length ? Math.min(...values) : 0, maximum = values.length ? Math.max(...values) : 0;
@@ -113,23 +138,34 @@ METHODS_SCRIPT = r'''
           const below = row.result_qualifier === 'lt';
           const strength = maximum === minimum ? .5 : (row.result_value - minimum) / (maximum - minimum);
           const color = below ? '#b7c9d5' : `hsl(${190 - 170 * strength}, 65%, 48%)`;
-          markup += `<circle class="hole-dot" role="button" tabindex="0" aria-label="${escape(row.sample_id)}" data-sample="${escape(row.sample_id)}" cx="${point.x}" cy="${point.y}" r="5" fill="${color}" stroke="white"><title>${escape(row.sample_id)}: ${below ? '&lt; ' : ''}${number(row.result_value)} ${escape(row.unit)}</title></circle>`;
+          const current = row.sample_id === selected;
+          markup += `<circle class="hole-dot" role="button" tabindex="0" aria-label="${escape(row.sample_id)}" aria-pressed="${current}" data-sample="${escape(row.sample_id)}" cx="${point.x}" cy="${point.y}" r="${current ? 7 : 5}" fill="${color}" stroke="${current ? '#e95e2a' : 'white'}" stroke-width="${current ? 3 : 1}"><title>${escape(row.sample_id)}: ${below ? '&lt; ' : ''}${number(row.result_value)} ${escape(row.unit)}</title></circle>`;
         }
         element('surfaceMap').innerHTML = markup;
         element('surfaceCaption').textContent = `${summary.surface_sample_count || 0} почвенных проб · нажмите на точку для просмотра её анализов`;
         element('surfaceMapLegend').textContent = !rows.length ? 'Поверхностная геохимия выключена или данные отсутствуют.' : values.length ? `Цвет отражает измеренное содержание: ${number(minimum)}–${number(maximum)} ${rows[0].unit}. Серые точки — ниже предела обнаружения.` : 'Все результаты ниже предела обнаружения. Показаны серым цветом.';
+        const sample = surfaceSamples.get(selected);
+        const measurement = rows.find(row => row.sample_id === selected);
+        element('surfaceSampleDetail').textContent = sample ? `${selected} · X ${number(sample.x_m)}, Y ${number(sample.y_m)} м · ${measurement ? analyte + ': ' + (measurement.result_qualifier === 'lt' ? '< ' : '') + number(measurement.result_value) + ' ' + measurement.unit : 'нет измерения по выбранному компоненту'}` : 'Выберите пробу из списка или нажмите на точку карты.';
+      }
+      function selectSurfaceSample(id) {
+        if (id && !surfaceSamples.has(id)) return;
+        element('surfaceSampleSelect').value = id;
+        element('observationSampleFilter').value = id;
+        page = 0; drawSurface(); renderTable();
       }
       function selectSurface(event) {
         const dot = event.target.closest('[data-sample]');
         if (!dot) return;
-        element('observationSampleFilter').value = dot.dataset.sample;
-        page = 0; renderTable();
+        selectSurfaceSample(dot.dataset.sample);
       }
+      element('surfaceSampleSelect').addEventListener('change', () => selectSurfaceSample(element('surfaceSampleSelect').value));
       element('surfaceMap').addEventListener('click', selectSurface);
       element('surfaceMap').addEventListener('keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); selectSurface(event); } });
       element('surfaceMapAnalyte').addEventListener('change', drawSurface);
 
       element('trenchSelect').innerHTML = trenches.map(row => `<option value="${escape(row.trench_id)}">${escape(row.trench_id)}</option>`).join('');
+      element('trenchSelect').disabled = !trenches.length;
       element('trenchProfileAnalyte').innerHTML = analyteOptions;
       function drawTrenches() {
         const frame = mapFrame();
@@ -160,6 +196,7 @@ METHODS_SCRIPT = r'''
         element('trenchProfile').innerHTML = profile;
       }
       function selectTrench(identifier) {
+        if (!trenches.some(row => row.trench_id === identifier)) return;
         selectedTrench = identifier; element('trenchSelect').value = identifier;
         element('observationTrenchFilter').value = identifier; page = 0; drawTrenches(); renderTable();
       }

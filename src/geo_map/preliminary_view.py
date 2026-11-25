@@ -114,23 +114,29 @@ PRELIMINARY_SCRIPT = r'''
         };
       }
 
-      function drawPreliminaryMap(method, rows, settings) {
+      function drawPreliminaryMap(method, rows, settings, selectedId) {
         const {point, markup} = mapFrame(dims);
         const radius = Math.max(1.25, Math.min(4.25, 85 / Math.sqrt(rows.length || 1)));
+        const selectedRow = rows.find(row => row.observation_id === selectedId);
+        const points = selectedRow ? [...rows.filter(row => row !== selectedRow), selectedRow] : rows;
+        const attributes = (row, x, y, size, border = 'none') => {
+          const selected = row.observation_id === selectedId;
+          return `class="hole-dot" role="button" tabindex="0" aria-label="${escape(row.observation_id)}" aria-pressed="${selected}" data-observation="${escape(row.observation_id)}" cx="${x}" cy="${y}" r="${selected ? Math.max(6, size + 2) : size}" stroke="${selected ? '#e95e2a' : border}" stroke-width="${selected ? 3 : 1}"`;
+        };
         if (method === 'outcrops') {
-          element('outcropMap').innerHTML = markup + rows.map(row => {
+          element('outcropMap').innerHTML = markup + points.map(row => {
             const {x, y} = point(row.x_m, row.y_m);
             const color = rockById[row.observed_rock_id]?.color || '#1677a8';
-            return `<circle cx="${x}" cy="${y}" r="4.5" fill="${escape(color)}" stroke="#243b53"><title>${escape(row.observation_id)} · ${escape(row.observed_rock_name)} · ${number(row.surface_elevation_m)} м</title></circle>`;
+            return `<circle ${attributes(row, x, y, 4.5, '#243b53')} fill="${escape(color)}"><title>${escape(row.observation_id)} · ${escape(row.observed_rock_name)} · ${number(row.surface_elevation_m)} м</title></circle>`;
           }).join('');
           element('outcropCaption').textContent = `${number(rows.length)} обнажений на ${number(settings.points?.length ?? settings.point_count)} обследованных точках. Цвет соответствует наблюдённой породе.`;
         } else if (method === 'terrain_survey') {
           const counts = new Map();
-          element('terrainSurveyMap').innerHTML = markup + rows.map(row => {
+          element('terrainSurveyMap').innerHTML = markup + points.map(row => {
             const {x, y} = point(row.x_m, row.y_m);
             const type = terrainTypes[row.terrain_type] || terrainTypes.undetermined;
             counts.set(type.label, (counts.get(type.label) || 0) + 1);
-            return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${type.color}"><title>${escape(row.observation_id)} · ${type.label} · ${number(row.surface_elevation_m)} м</title></circle>`;
+            return `<circle ${attributes(row, x, y, radius)} fill="${type.color}"><title>${escape(row.observation_id)} · ${type.label} · ${number(row.surface_elevation_m)} м</title></circle>`;
           }).join('');
           element('terrainSurveyCaption').textContent = `${number(rows.length)} точек · порог уклона ${number(settings.slope_threshold_deg)}° · порог относительной высоты ${number(settings.local_relief_threshold_m)} м`;
           element('terrainSurveyLegend').innerHTML = Object.values(terrainTypes).filter(type => counts.has(type.label))
@@ -140,10 +146,10 @@ PRELIMINARY_SCRIPT = r'''
           element('geophysicalHeading').textContent = label;
           const values = rows.map(row => row[field]);
           const minimum = Math.min(...values), maximum = Math.max(...values);
-          element('geophysicalMap').innerHTML = markup + rows.map(row => {
+          element('geophysicalMap').innerHTML = markup + points.map(row => {
             const {x, y} = point(row.x_m, row.y_m);
             const scaled = minimum === maximum ? .5 : (row[field] - minimum) / (maximum - minimum);
-            return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${geophysicalColor(scaled)}"><title>${escape(row.observation_id)} · ${label} ${number(row[field])} ${unit}</title></circle>`;
+            return `<circle ${attributes(row, x, y, radius)} fill="${geophysicalColor(scaled)}"><title>${escape(row.observation_id)} · ${label} ${number(row[field])} ${unit}</title></circle>`;
           }).join('');
           element('geophysicalCaption').textContent = rows.length
             ? `${number(rows.length)} точек · от ${number(minimum)} ${unit} (синий) до ${number(maximum)} ${unit} (оранжевый)`
@@ -185,15 +191,40 @@ PRELIMINARY_SCRIPT = r'''
             return;
           }
           let active, page = 0;
+          const selectedPoints = new Map();
+          const pointFilter = element('preliminaryPointFilter');
           const buttons = addMethodButtons(methods, 'preliminarySections', activate);
           const activeTable = () => methods[active].table;
           const activeRows = () => results[activeTable()] || [];
+          const selectedPoint = () => selectedPoints.get(active) ?? '';
+          const selectedRow = () => activeRows().find(row => row.observation_id === selectedPoint());
           function renderTable() {
-            page = renderObservationRows('preliminary', tableFields[activeTable()], activeRows(),
+            const rows = selectedPoint() ? activeRows().filter(row => row.observation_id === selectedPoint()) : activeRows();
+            page = renderObservationRows('preliminary', tableFields[activeTable()], rows,
                                          page, 'Для этого раздела пока нет наблюдений');
           }
           function renderMap() {
-            drawPreliminaryMap(active, activeRows(), settings[active] ?? settings[methods[active].archiveSetting]);
+            drawPreliminaryMap(active, activeRows(), settings[active] ?? settings[methods[active].archiveSetting], selectedPoint());
+            const row = selectedRow();
+            const detailFields = {
+              magnetic_observations: ['magnetic_anomaly_nt', 'magnetic_sigma_nt'],
+              gamma_observations: ['gamma_count_rate_cps', 'gamma_sigma_cps'],
+              terrain_survey: ['terrain_type', 'surface_elevation_m', 'slope_deg', 'local_relief_m'],
+              outcrops: ['observed_rock_name', 'surface_elevation_m']
+            };
+            element('preliminaryPointDetail').innerHTML = row
+              ? `<strong>${escape(row.observation_id)}</strong> · X ${number(row.x_m)}, Y ${number(row.y_m)} м · ` + detailFields[active].map(field => {
+                const value = row[field];
+                const display = value == null ? '—' : typeof value === 'number' ? number(value) : categoryNames[value] || value;
+                return `${escape(fieldNames[field] || field)}: ${escape(display)}`;
+              }).join(' · ')
+              : activeRows().length ? 'Выберите точку из списка или нажмите на карту. Полный набор данных можно скачать независимо от выбора.' : 'В этом разделе нет наблюдений.';
+          }
+          function selectPoint(id) {
+            if (id && !activeRows().some(row => row.observation_id === id)) return;
+            selectedPoints.set(active, id);
+            pointFilter.value = id;
+            page = 0; renderMap(); renderTable();
           }
           function activate(key) {
             active = key;
@@ -203,8 +234,24 @@ PRELIMINARY_SCRIPT = r'''
               buttons[name].setAttribute('aria-pressed', String(name === key));
             }
             element('preliminaryDataTitle').textContent = methods[key].title;
+            pointFilter.innerHTML = '<option value="">Все точки наблюдения</option>' + activeRows().map(row => `<option value="${escape(row.observation_id)}">${escape(row.observation_id)} · X ${number(row.x_m)}, Y ${number(row.y_m)} м</option>`).join('');
+            pointFilter.value = selectedPoint();
+            pointFilter.disabled = !activeRows().length;
             renderMap();
             renderTable();
+          }
+          pointFilter.addEventListener('change', () => selectPoint(pointFilter.value));
+          for (const id of ['outcropMap', 'terrainSurveyMap', 'geophysicalMap']) {
+            const map = element(id);
+            map.addEventListener('click', event => {
+              const dot = event.target.closest('[data-observation]');
+              if (dot) selectPoint(dot.dataset.observation);
+            });
+            map.addEventListener('keydown', event => {
+              if (!['Enter', ' '].includes(event.key)) return;
+              const dot = event.target.closest('[data-observation]');
+              if (dot) { event.preventDefault(); selectPoint(dot.dataset.observation); pointFilter.focus(); }
+            });
           }
           element('downloadPreliminaryGeoJson').addEventListener('click', () => {
             const name = activeTable();

@@ -30,6 +30,11 @@ WORKSPACE_STYLES = r'''
     .hole-dot:hover { stroke: var(--orange); stroke-width: 3; }
     .profile-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
     .profile-heading select { width: auto; max-width: 180px; }
+    .selection-controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin: 12px 0; }
+    .selection-controls label { flex: 1 1 160px; min-width: 0; margin: 0; }
+    .selection-controls select { display: block; width: 100%; margin-top: 5px; }
+    .selection-detail { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 10px 0 0; }
+    .selection-detail strong { color: var(--navy); }
     .hole-profile { height: 280px; width: 100%; display: block; }
     .gamma-profile { height: 320px; width: 100%; display: block; }
     .gamma-profile-panel { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); }
@@ -126,12 +131,17 @@ WORKSPACE_PANELS = r'''
       <div class="expedition-grid" id="boreholeOverview">
         <div class="panel-card">
           <h3>План бурения</h3><div class="muted">Нажмите на скважину, чтобы открыть её данные</div>
+          <div class="selection-controls"><label id="profileSourceLabel" class="hidden">Источник бурения<select id="profileSource"></select></label></div>
           <svg id="surveyMap" class="survey-map" viewBox="0 0 520 300" role="group" aria-label="Положения наблюдённых скважин"></svg>
           <div class="muted" id="surveyCaption"></div>
           <div class="profile-key hidden" id="surveyPlacementKey" aria-label="Основания выбора скважин"></div>
         </div>
         <div class="panel-card">
-          <div class="profile-heading"><div><h3 id="holeProfileTitle"></h3><div id="holeProfileCaption" class="muted"></div></div><select id="profileAnalyte" aria-label="Компонент на графике содержания"></select></div>
+          <div class="profile-heading"><div><h3 id="holeProfileTitle"></h3><div id="holeProfileCaption" class="muted" aria-live="polite"></div></div></div>
+          <div class="selection-controls">
+            <label>Скважина<select id="profileHole"></select></label>
+            <label>Компонент<select id="profileAnalyte"></select></label>
+          </div>
           <svg id="holeProfile" class="hole-profile" viewBox="0 0 700 300" role="img" aria-label="Литологический журнал и анализы выбранной скважины"></svg>
           <div class="profile-key" id="profileKey"></div>
           <div id="gammaProfilePanel" class="gamma-profile-panel hidden">
@@ -283,6 +293,9 @@ WORKSPACE_SCRIPT = r'''
       const options = holes.map(hole => `<option value="${escape(hole.hole_id)}">${escape(hole.hole_id)}</option>`).join('');
       element('observationHoleFilter').innerHTML = '<option value="">Все скважины</option>' + options;
       element('observationSourceFilter').innerHTML = '<option value="">Все источники бурения</option>' + drillingSources.map(source => `<option value="${escape(source.kind)}">${escape(source.title)} · ${source.summary.hole_count} скв.</option>`).join('');
+      element('profileSource').innerHTML = element('observationSourceFilter').innerHTML;
+      element('profileSourceLabel').classList.toggle('hidden', !drillingSources.length);
+      element('profileHole').innerHTML = options;
       const analyteOptions = observations.plan.analytes.map(item => `<option value="${escape(item.analyte)}">${escape(item.analyte)} · ${escape(item.unit)}</option>`).join('');
       element('profileAnalyte').innerHTML = analyteOptions;
       const filterAnalytes = [...new Map([...observations.plan.analytes, ...(observations.plan.methods?.surface_geochemistry?.analytes || [])].map(item => [item.analyte, item])).values()];
@@ -338,11 +351,19 @@ WORKSPACE_SCRIPT = r'''
       }
       function updateSourceHoles() {
         const available = sourceRows('borehole_collars');
-        element('observationHoleFilter').innerHTML = '<option value="">Все скважины источника</option>' + available.map(hole => `<option value="${escape(hole.hole_id)}">${escape(hole.hole_id)}</option>`).join('');
+        const availableOptions = available.map(hole => `<option value="${escape(hole.hole_id)}">${escape(hole.hole_id)} · ${hole.dip_deg === -90 ? 'вертикальная' : 'наклонная'}</option>`).join('');
+        element('observationHoleFilter').innerHTML = '<option value="">Все скважины источника</option>' + availableOptions;
+        element('profileSource').value = element('observationSourceFilter').value;
+        element('profileHole').innerHTML = availableOptions || '<option value="">Нет скважин</option>';
+        element('profileHole').disabled = !available.length;
         if (!available.some(hole => hole.hole_id === selectedHole)) selectedHole = available[0]?.hole_id;
         drawSurvey(); drawProfile();
       }
       element('observationSourceFilter').addEventListener('change', () => {
+        page = 0; updateSourceHoles(); renderTable();
+      });
+      element('profileSource').addEventListener('change', () => {
+        element('observationSourceFilter').value = element('profileSource').value;
         page = 0; updateSourceHoles(); renderTable();
       });
       element('downloadDrillingSource').addEventListener('click', () => {
@@ -468,10 +489,12 @@ WORKSPACE_SCRIPT = r'''
         element('holeTrajectoryCaption').textContent = `Забой: X ${number(end.x)} · Y ${number(end.y)} м · вертикальная глубина ${number(end.depth)} м. Траектория рассчитана по измеренному устью и заданному направлению.`;
       }
       function selectHole(holeId) {
+        if (!sourceRows('borehole_collars').some(hole => hole.hole_id === holeId)) return;
         selectedHole = holeId;
         element('observationHoleFilter').value = holeId;
         page = 0; drawSurvey(); drawProfile(); renderTable();
       }
+      element('profileHole').addEventListener('change', () => selectHole(element('profileHole').value));
       element('surveyMap').addEventListener('click', event => { const dot = event.target.closest('[data-hole]'); if (dot) selectHole(dot.dataset.hole); });
       element('surveyMap').addEventListener('keydown', event => { if (!['Enter', ' '].includes(event.key)) return; const dot = event.target.closest('[data-hole]'); if (dot) { event.preventDefault(); const id = dot.dataset.hole; selectHole(id); [...element('surveyMap').querySelectorAll('[data-hole]')].find(item => item.dataset.hole === id)?.focus(); } });
 
@@ -509,6 +532,8 @@ WORKSPACE_SCRIPT = r'''
 
       function drawProfile() {
         const hole = holes.find(item => item.hole_id === selectedHole);
+        element('profileHole').value = selectedHole ?? '';
+        element('profileAnalyte').disabled = !hole;
         drawGammaProfile(hole);
         if (!hole) {
           element('holeProfileTitle').textContent = 'В этом источнике нет скважин';
