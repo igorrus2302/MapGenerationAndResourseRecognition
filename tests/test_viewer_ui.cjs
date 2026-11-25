@@ -7,6 +7,16 @@ const vm = require('node:vm');
 const html = fs.readFileSync(process.argv[2] || 'output/map/map_view.html', 'utf8');
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match => match[1]);
 assert.equal(scripts.length, 1);
+assert.match(html, /<header>\s*<h1>Геологическая разведка<\/h1>\s*<\/header>/);
+assert.doesNotMatch(html, /\bheaderStats\b|class="brand-mark"/);
+// The atlas theme preserves the five-step workspace.
+const style = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+assert.match(style, /\.workspace-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(5, minmax\(0, 1fr\)\)/);
+assert.match(style, /\.workspace-tab\[aria-selected="true"\]\s*\{[^}]*border-top-color:\s*var\(--highlight\)/);
+assert.match(style, /\.workspace-page\s*\{[^}]*overflow:\s*auto/);
+assert.match(style, /\.expedition-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+assert.match(style, /\.workspace-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
+assert.match(style, /\.workspace-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
 
 class Element {
   constructor(attributes = {}) {
@@ -62,6 +72,10 @@ const get = id => {
   assert.ok(nodes.has(id), `Missing element #${id}`);
   return nodes.get(id);
 };
+assert.deepEqual(all.filter(node => node.classList.contains('workspace-tab')).map(node => node.dataset.workspace),
+  ['truth', 'preliminary', 'expedition', 'recognized', 'minerals']);
+assert.equal(nodes.has('tab-similarity'), false);
+assert.equal(nodes.has('similarityPanel'), false);
 function clickMapPoint(map, attribute, identifier) {
   get(map).fire('click', {target: {closest: selector => selector === `[data-${attribute}]` ? {dataset: {[attribute]: identifier}} : null}});
 }
@@ -84,6 +98,13 @@ const context = vm.createContext({
   setTimeout() {},
 });
 new vm.Script(scripts[0]).runInContext(context);
+const mapDimensions = vm.runInContext('MAP_DATA.dimensions', context);
+assert.equal(get('mapLength').textContent, `${mapDimensions.height_m} м`);
+assert.equal(get('mapWidth').textContent, `${mapDimensions.width_m} м`);
+assert.equal(get('mapHeight').textContent, `${mapDimensions.depth_m} м`);
+assert.match(html, /<div class="map-dimensions map-seed"><span>Seed<\/span><strong id="seedValue"><\/strong><\/div>/);
+assert.equal(get('seedValue').textContent, vm.runInContext('MAP_SEED_TEXT', context));
+assert.doesNotMatch(html, /class="status-pill"/);
 const observations = vm.runInContext('OBSERVATION_DATA', context);
 const preliminaryPlan = vm.runInContext('PRELIMINARY_PLAN', context);
 if (vm.runInContext('Boolean(MAP_DATA.terrain)', context)) {
@@ -115,18 +136,20 @@ if (vm.runInContext('Boolean(MAP_DATA.terrain)', context)) {
 
 assert.equal(location.hash, '#truth');
 assert.equal(get('truthPanel').classList.contains('hidden'), false);
-assert.equal(get('similarityPanel').classList.contains('hidden'), true);
+assert.equal(get('mineralsPanel').classList.contains('hidden'), true);
 get('tab-truth').fire('keydown', {key: 'End'});
-assert.equal(location.hash, '#similarity');
-assert.equal(get('tab-similarity').attributes['aria-selected'], 'true');
+assert.equal(location.hash, '#minerals');
+assert.equal(get('tab-minerals').attributes['aria-selected'], 'true');
 assert.equal(get('truthPanel').classList.contains('hidden'), true);
-assert.equal(get('similarityPanel').classList.contains('hidden'), false);
-assert.match(html, /Сравнение с истинной картой/);
+assert.equal(get('mineralsPanel').classList.contains('hidden'), false);
 get('tab-preliminary').click();
 assert.equal(location.hash, '#preliminary');
 assert.equal(get('preliminaryPanel').classList.contains('hidden'), false);
 assert.equal(get('expeditionPanel').classList.contains('hidden'), true);
 assert.equal(get('preliminaryEmpty').classList.contains('hidden'), false);
+assert.match(html, /<div class="empty-card-actions">\s*<button id="collectPreliminary"[^>]*>[\s\S]*?<\/button>\s*<button id="openManualPreliminary"[^>]*>[\s\S]*?<\/button>\s*<\/div>/);
+assert.match(html, /\.empty-card-actions\s*\{[^}]*display:\s*grid;[^}]*gap:\s*12px;/);
+assert.match(html, /\.empty-card-actions button\s*\{[^}]*width:\s*100%;[^}]*white-space:\s*normal;/);
 assert.equal(get('preliminaryContent').classList.contains('hidden'), true);
 assert.equal(get('preliminarySections').children.length, 0);
 assert.equal(get('preliminaryTableBody').innerHTML, '');
@@ -147,10 +170,23 @@ assert.equal(get('preliminaryEmpty').classList.contains('hidden'), openedPrelimi
 assert.equal(get('preliminaryContent').classList.contains('hidden'), !openedPreliminary);
 get('tab-expedition').click();
 assert.equal(get('truthPanel').classList.contains('hidden'), true);
-assert.equal(get('similarityPanel').classList.contains('hidden'), true);
+assert.equal(get('mineralsPanel').classList.contains('hidden'), true);
 assert.equal(get('preliminaryPanel').classList.contains('hidden'), true);
 assert.equal(get('expeditionPanel').classList.contains('hidden'), false);
 assert.equal(get('tab-expedition').attributes['aria-selected'], 'true');
+assert.equal(nodes.has('expeditionPlan'), false);
+assert.equal(nodes.has('expeditionNotes'), false);
+for (const prefix of ['preliminary','field']) {
+  const choose = get(prefix+'ImportChoose'), file = get(prefix+'ImportFile');
+  assert.equal(choose.attributes.type, 'button');
+  assert.equal(file.attributes.type, 'file');
+  if (observations) {
+    let opened = 0;
+    file.addEventListener('click', () => opened++);
+    choose.click();
+    assert.equal(opened, 1, 'Upload button opens file picker');
+  }
+}
 
 if (!observations) {
   if (hasSurvey) assert.match(get('preliminaryTableBody').innerHTML, /(?:MAG|GAM|TER|OUT)-0001/);
@@ -207,12 +243,24 @@ if (!observations) {
     assert.match(get('observationTableHead').innerHTML, /gamma_count_rate_cps/);
     assert.equal(get('observationCount').textContent, `${gammaRows.length.toLocaleString('ru-RU')} записей`);
   }
+  const magneticRows = (observations.tables.downhole_magnetic || []).filter(row => row.hole_id === lastHole);
+  assert.equal(get('magneticProfilePanel').classList.contains('hidden'), !magneticRows.length);
+  if (magneticRows.length) {
+    assert.ok(get('magneticProfile').innerHTML.includes(magneticRows[0].measurement_id));
+    assert.ok(!get('magneticProfile').innerHTML.includes('NaN'));
+    const magneticTab = get('observationTabs').children.find(button => button.textContent === 'Магнитный каротаж');
+    magneticTab.click();
+    assert.match(get('observationTableHead').innerHTML, /magnetic_susceptibility_si/);
+    assert.equal(get('observationCount').textContent, `${magneticRows.length.toLocaleString('ru-RU')} записей`);
+  }
   clickMapPoint('surveyMap', 'hole', collars[0].hole_id);
   assert.equal(get('profileHole').value, collars[0].hole_id);
   assert.equal(get('observationHoleFilter').value, collars[0].hole_id);
   assert.match(get('holeTrajectory').innerHTML, new RegExp(`data-borehole-path="${collars[0].hole_id}"`));
   const firstGamma = (observations.tables.downhole_gamma || []).find(row => row.hole_id === collars[0].hole_id);
   if (firstGamma) assert.ok(get('gammaProfile').innerHTML.includes(firstGamma.measurement_id));
+  const firstMagnetic = (observations.tables.downhole_magnetic || []).find(row => row.hole_id === collars[0].hole_id);
+  if (firstMagnetic) assert.ok(get('magneticProfile').innerHTML.includes(firstMagnetic.measurement_id));
   get('observationTabs').children[2].click();
   assert.match(get('observationTableHead').innerHTML, /Компонент/);
   assert.equal(get('analyteFilterLabel').classList.contains('hidden'), false);
@@ -342,36 +390,56 @@ if (!observations) {
   assert.equal(get('recognitionEmpty').classList.contains('hidden'), Boolean(recognition));
   if (recognition) {
     assert.equal(get('recognitionContent').classList.contains('hidden'), false);
-    assert.ok(!get('recognitionMap').innerHTML.includes('NaN'));
-    if (recognition.targets.length) {
-      const target = recognition.targets[0];
-      assert.ok(get('recognitionTargets').innerHTML.includes(target.site_id));
-      if (target.terrain_context) assert.ok(get('recognitionTargets').innerHTML.includes(`data-terrain-observation="${target.terrain_context.observation_id}"`));
-      assert.ok(get('recognitionMap').innerHTML.includes(`${target.analyte} · ${target.site_id}`));
-      get('recognitionAnalyte').value = target.analyte;
-      get('recognitionAnalyte').fire('change');
-      const expected = recognition.targets.filter(row => row.analyte === target.analyte).length;
-      assert.equal((get('recognitionTargets').innerHTML.match(/<tr>/g) || []).length, expected);
-    } else {
-      assert.match(get('recognitionTargets').innerHTML, /Нет целей/);
+    for (const id of ['recognitionMap', 'recognitionTargets', 'recognitionAnalyte',
+      'reconstructionMode', 'reconstructionSlice', 'reconstructionLayer', 'backToReconstruction',
+      'reconstructionCellInfo', 'reconstructionExtent', 'openMineralResults', 'recognitionSummary']) {
+      assert.equal(nodes.has(id), false, `Removed control #${id}`);
     }
     get('downloadRecognition').click();
     const model = recognition.reconstructed_map;
     if (model) {
       assert.equal(get('reconstructedModel').classList.contains('hidden'), false);
-      assert.ok(get('reconstructionSvg').innerHTML.includes('data-voxel='));
-      for (const mode of ['xz', 'yz', 'terrain', 'magnetic', 'gamma', '3d', 'xy']) {
-        get('reconstructionMode').value = mode;
-        get('reconstructionMode').fire('change');
-        assert.ok(!get('reconstructionSvg').innerHTML.includes('NaN'), mode);
-        assert.ok(get('reconstructionSvg').innerHTML.includes(mode === '3d' ? '<polygon' : '<rect'), mode);
+      const svg = get('reconstructionSvg');
+      const volume = svg.innerHTML;
+      assert.ok(!volume.includes('NaN'));
+      assert.match(volume, /<g data-model-outline="true" fill="none"/);
+      const oreVoxels = new Set(model.mineral_zones.flatMap(zone => zone.cells.map(cell => cell[0])));
+      const polygons = [...volume.matchAll(/<polygon\b[^>]*>/g)].map(match => match[0]);
+      assert.equal(polygons.length, oreVoxels.size * 3);
+      const drawnVoxels = new Set(polygons.map(p => Number(p.match(/data-voxel="(\d+)"/)[1])));
+      assert.deepEqual([...drawnVoxels].sort((a,b)=>a-b), [...oreVoxels].sort((a,b)=>a-b));
+      assert.doesNotMatch(get('reconstructionLegend').innerHTML, /Полупрозрачные породы/);
+      get('reconstructionRotateRight').click();
+      assert.notEqual(svg.innerHTML, volume, 'Rotation must change projected geometry');
+      get('reconstructionRotateLeft').click();
+      get('reconstructionResetView').click();
+      assert.equal(svg.innerHTML, volume);
+      svg.fire('pointerdown', {button:0, pointerId:1, clientX:200});
+      svg.fire('pointermove', {pointerId:1, clientX:260});
+      svg.fire('pointerup', {pointerId:1});
+      const rotated = svg.innerHTML;
+      assert.notEqual(rotated, volume, 'Dragging must rotate the model');
+      svg.fire('click', {target:{closest:()=>null}});
+      svg.fire('wheel', {deltaY:-120});
+      assert.notEqual(svg.innerHTML, rotated, 'Wheel must scale the model');
+      get('reconstructionResetView').click();
+      assert.equal(svg.innerHTML, volume);
+      if (model.mineral_zones.length) {
+        const zone = model.mineral_zones[0];
+        get('reconstructionMineral').value = zone.mineral_id;
+        get('reconstructionMineral').fire('change');
+        assert.ok(get('reconstructionSvg').innerHTML.includes(`fill="${zone.color}"`));
+        assert.ok(!get('reconstructionSvg').innerHTML.includes('NaN'));
+        const voxel = zone.cells[0][0];
+        clickMapPoint('reconstructionSvg','voxel',voxel);
+        assert.ok(get('reconstructionSvg').innerHTML.includes(`data-voxel="${voxel}" data-selected="true"`));
+        assert.ok(get('reconstructionSvg').innerHTML.includes(zone.zone_id));
+        get('reconstructionMineral').value = '';
+        get('reconstructionMineral').fire('change');
+      } else {
+        assert.match(volume, /Нет рудных зон/);
       }
-      get('reconstructionSlice').value = '0';
-      get('reconstructionSlice').fire('input');
-      get('reconstructionLayer').value = 'support';
-      get('reconstructionLayer').fire('change');
-      assert.match(get('reconstructionLegend').innerHTML, /Интерполяция/);
-      get('openMineralResults').click();
+      get('tab-minerals').click();
       assert.equal(location.hash, '#minerals');
       assert.equal(get('mineralsContent').classList.contains('hidden'), false);
       if (model.mineral_zones.length) {
@@ -404,11 +472,13 @@ if (!observations) {
         clickMapPoint('mineralZoneList', 'zone', zone.zone_id);
         assert.equal(location.hash, '#recognized');
         assert.equal(get('reconstructionMineral').value, zone.mineral_id);
-        assert.ok(get('reconstructionCellInfo').innerHTML.includes(zone.zone_id));
+        const selectedVoxel = zone.cells.find(c => c[1] === 2)?.[0] ?? zone.cells[0][0];
+        assert.ok(get('reconstructionSvg').innerHTML.includes(`data-voxel="${selectedVoxel}" data-selected="true"`));
+        assert.ok(get('reconstructionSvg').innerHTML.includes(zone.zone_id));
       } else {
         assert.match(get('mineralZoneList').innerHTML, /Нет выделенных зон/);
         assert.match(get('mineralDepositEstimates').innerHTML, /Залежи по имеющимся наблюдениям не выделены/);
-        get('backToReconstruction').click();
+        get('tab-recognized').click();
       }
       assert.equal(location.hash, '#recognized');
       reconstructedDownload = blobs.length;
@@ -575,6 +645,23 @@ if (!observations) {
     assert.equal(observations.tables.borehole_collars.length,count+1);
     assert.equal(observations.summary.hole_count,count+1);
     assert.ok(get('profileHole').innerHTML.includes(newHole.hole_id));
+    if (observations.table_fields.downhole_magnetic) {
+      const magneticTab=get('observationTabs').children.find(button=>button.textContent==='Магнитный каротаж');
+      magneticTab.click();
+      const row={campaign_id:observations.campaign.campaign_id,hole_id:newHole.hole_id,measurement_id:'MANUAL-MAG-UI-TEST',from_m:0,to_m:1,depth_m:.5,magnetic_susceptibility_si:.002,magnetic_sigma_si:.00005,measurement_method:'logger',logged_date:observations.campaign.date};
+      const initial=observations.tables.downhole_magnetic.length;
+      await upload('fieldImportFile','magnetic_log.json',[row]);
+      assert.equal(get('fieldImportStatus').dataset.state,'success',get('fieldImportStatus').textContent);
+      assert.doesNotMatch(get('fieldImportStatus').textContent,/не удалось обновить отображение/);
+      assert.equal(observations.tables.downhole_magnetic.length,initial+1);
+      get('profileHole').value=newHole.hole_id;get('profileHole').fire('change');
+      assert.equal(get('magneticProfilePanel').classList.contains('hidden'),false);
+      assert.ok(get('magneticProfile').innerHTML.includes(row.measurement_id));
+      await upload('fieldImportFile','magnetic_again.json',[row]);
+      assert.equal(get('fieldImportStatus').dataset.state,'duplicate');
+      get('fieldImportTemplate').click();
+      assert.equal((await blobs.at(-1).text()).trim(),observations.table_fields.downhole_magnetic.map(f=>'"'+f+'"').join(','));
+    }
     get('fieldImportExport').click();
     const merged=JSON.parse(await blobs.at(-1).text());
     assert.equal(merged.tables.borehole_collars.at(-1).hole_id,newHole.hole_id);

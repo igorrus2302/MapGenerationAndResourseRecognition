@@ -135,6 +135,18 @@ def local_gamma_response(part, model, rock_sources, deposits, mineral_sources):
                   for ore, deposit, ore_source in _ore_sources(part, deposits, mineral_sources)))
 
 
+def local_magnetic_response(part, rock_sources, deposits, mineral_sources):
+    """Local volume susceptibility, not the surface magnetic anomaly in nT."""
+    value = rock_sources.get(part["rock_id"], {}).get("magnetic_susceptibility_si", 0)
+    for ore, deposit, source in _ore_sources(part, deposits, mineral_sources):
+        susceptibility = source.get("magnetic_susceptibility_si", 0)
+        if not susceptibility:
+            continue
+        reference_grade = source.get("magnetic_reference_grade_percent", deposit["max_grade"])
+        value += susceptibility * ore["average_grade"] / reference_grade
+    return value
+
+
 def _legacy_response(cell, model, rock_sources, ores):
     elevation = cell.get("surface_elevation_m", 0)
     magnetization, radiation = 0.0, model["gamma_background_cps"]

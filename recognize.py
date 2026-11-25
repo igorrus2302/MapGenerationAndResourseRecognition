@@ -75,6 +75,8 @@ def main() -> None:
     print(f"Целей с дополнительным признаком рельефа: {summary['targets_supported_by_terrain']}")
     print(f"Геофизических аномалий: {summary['geophysical_anomaly_count']}")
     print(f"Целей с поддержкой геофизики: {summary['targets_supported_by_geophysics']}")
+    print(f"Аномалий магнитного каротажа: {summary['downhole_magnetic_anomaly_count']}")
+    print(f"Целей с поддержкой магнитного каротажа: {summary['targets_supported_by_downhole_magnetic']}")
     print(f"Результат поиска: {output}")
     print(f"Реконструированная карта: {reconstructed}")
     print(f"Выделено пространственных рудных зон: {result['reconstructed_map']['summary']['mineral_zone_count']}")

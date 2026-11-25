@@ -18,6 +18,7 @@ from .observation_sources import BOREHOLE_SOURCE_KINDS, borehole_source_kind
 OBJECT_TABLES = {
     "boreholes": ("hole_id", ("borehole_collars", "borehole_lithology")),
     "downhole_gamma": ("hole_id", ("downhole_gamma",)),
+    "downhole_magnetic": ("hole_id", ("downhole_magnetic",)),
     "trenches": ("trench_id", ("trenches", "trench_intervals")),
     "borehole_samples": ("sample_id", ("borehole_assays",)),
     "trench_samples": ("sample_id", ("trench_samples",)),
@@ -75,6 +76,7 @@ def _object_layout(groups: dict, collars: list[dict]):
         ("trench_samples", "trenches", "trench_id", "samples", "sample_files", "trench_samples"),
         ("structural_observations", "boreholes", "hole_id", "structures", "structural_files", "surface_structures"),
         ("downhole_gamma", "boreholes", "hole_id", "gamma_log", "gamma_log_files", "gamma_logs"),
+        ("downhole_magnetic", "boreholes", "hole_id", "magnetic_log", "magnetic_log_files", "magnetic_logs"),
     ):
         paths[kind] = {}
         for identifier, data in groups[kind].items():
@@ -119,6 +121,7 @@ def _write_objects(bundle: dict[str, Any], directory: Path) -> None:
             if kind == "boreholes":
                 record["structural_files"] = links.get((kind, identifier, "structural_files"), [])
                 record["gamma_log_files"] = links.get((kind, identifier, "gamma_log_files"), [])
+                record["magnetic_log_files"] = links.get((kind, identifier, "magnetic_log_files"), [])
             output = directory / paths[kind][identifier]
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(

@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from geo_map.observations import TABLE_FIELDS, TruthSampler, generate_observations, save_observations
+from geo_map.observations import TABLE_FIELDS, TruthSampler, generate_observations, save_observations, with_magnetic_log_schema
 from geo_map.viewer import build_viewer
 
 
@@ -208,13 +208,28 @@ class ObservationTests(unittest.TestCase):
         bundle = generate_observations(self.truth, self.config, seed=7)
         with tempfile.TemporaryDirectory() as directory:
             html = build_viewer(self.truth, Path(directory) / "viewer.html", observations=bundle).read_text()
-            for panel in ("truthPanel", "preliminaryPanel", "expeditionPanel", "recognizedPanel", "similarityPanel"):
+            for panel in ("truthPanel", "preliminaryPanel", "expeditionPanel", "recognizedPanel", "mineralsPanel"):
                 self.assertIn(f'id="{panel}"', html)
+            self.assertNotIn('id="similarityPanel"', html)
             self.assertIn("Результаты поиска ещё не загружены", html)
             self.assertNotIn('<script>alert(1)</script>', html)
             literal = html.split("const OBSERVATION_DATA = ", 1)[1].split(";\n", 1)[0]
             self.assertEqual(json.loads(literal), bundle)
             self.assertEqual(html.count("</script>"), 1)
+
+    def test_old_export_can_import_magnetic_logs_without_inventing_data(self) -> None:
+        old = generate_observations(self.truth, self.config, seed=7)
+        old["schema_version"] = "1.8"
+        old["table_fields"].pop("downhole_magnetic")
+        old["tables"].pop("downhole_magnetic")
+        old["summary"].pop("magnetic_log_count")
+        old["plan"]["methods"].pop("downhole_magnetic")
+        upgraded = with_magnetic_log_schema(old)
+        self.assertNotIn("downhole_magnetic", old["tables"])
+        self.assertEqual(upgraded["tables"]["downhole_magnetic"], [])
+        self.assertEqual(upgraded["table_fields"]["downhole_magnetic"], TABLE_FIELDS["downhole_magnetic"])
+        self.assertEqual(upgraded["summary"]["magnetic_log_count"], 0)
+        self.assertTrue(all("downhole_magnetic" in source["table_names"] for source in upgraded["borehole_sources"]))
 
 
 if __name__ == "__main__":

@@ -38,14 +38,14 @@ const table='terrain_observations';
 const campaign={campaign_id:'TEST',coordinate_system:'local_cartesian',width_m:500,height_m:500};
 const row={campaign_id:'TEST',observation_id:'XLSX-1',x_m:20,y_m:30,surface_elevation_m:12.5,elevation_uncertainty_m:.2,slope_deg:4,local_relief_m:null,terrain_type:'flat',observation_method:'survey',survey_date:'2026-11-25'};
 const newBundle=()=>({campaign,plan:{analytes:[],methods:{}},table_fields:fields,tables:Object.fromEntries(Object.keys(fields).map(k=>[k,[]])),summary:{},rock_catalog:[],geojson:{},borehole_sources:[]});
-function filledWorkbook(compression,formula=false){
+function filledWorkbook(compression,formula=false,sheetName=table,values=row){
   const script=`import io,json,sys,zipfile,xml.etree.ElementTree as ET
 ns='http://schemas.openxmlformats.org/spreadsheetml/2006/main'
-source=sys.argv[1]; compression=int(sys.argv[2]); formula=sys.argv[3]=='true'
+source=sys.argv[1]; compression=int(sys.argv[2]); formula=sys.argv[3]=='true'; sheet_name=sys.argv[4]
 values=json.loads(sys.stdin.read())
 with zipfile.ZipFile(source) as old:
  sheets=ET.fromstring(old.read('xl/workbook.xml')).find('{'+ns+'}sheets')
- i=next(i for i, sheet in enumerate(sheets,1) if sheet.attrib['name']=='terrain_observations')
+ i=next(i for i, sheet in enumerate(sheets,1) if sheet.attrib['name']==sheet_name)
  name=f'xl/worksheets/sheet{i}.xml'
  root=ET.fromstring(old.read(name)); data=root.find('{'+ns+'}sheetData')
  row=ET.SubElement(data,'{'+ns+'}row',{'r':'2'})
@@ -63,7 +63,7 @@ with zipfile.ZipFile(source) as old:
  with zipfile.ZipFile(output,'w',compression) as new:
   for part in old.namelist():new.writestr(part,ET.tostring(root) if part==name else old.read(part))
  sys.stdout.buffer.write(output.getvalue())`;
-  const result=spawnSync('python3',['-c',script,workbook,String(compression),String(formula)],{input:JSON.stringify(row),maxBuffer:2e6});
+  const result=spawnSync('python3',['-c',script,workbook,String(compression),String(formula),sheetName],{input:JSON.stringify(values),maxBuffer:2e6});
   assert.equal(result.status,0,result.stderr?.toString());
   return {arrayBuffer:async()=>result.stdout.buffer.slice(result.stdout.byteOffset,result.stdout.byteOffset+result.stdout.byteLength)};
 }
@@ -75,5 +75,11 @@ with zipfile.ZipFile(source) as old:
     assert.equal(result.added,1);assert.deepEqual(bundle.tables[table][0],row);
   }
   await assert.rejects(()=>engine.parseWorkbook(filledWorkbook(0,true),newBundle(),[table]),/формулы/);
+  const magneticTable='downhole_magnetic', bundle=newBundle();
+  bundle.tables.borehole_collars.push({hole_id:'BH-X',total_depth_m:10,dip_deg:-90,x_m:10,y_m:10});
+  const log={campaign_id:'TEST',hole_id:'BH-X',measurement_id:'XLSX-MAG',from_m:0,to_m:1,depth_m:.5,magnetic_susceptibility_si:-0.00002,magnetic_sigma_si:0.00005,measurement_method:'logger',logged_date:'2026-11-25'};
+  const magneticPayload=await engine.parseWorkbook(filledWorkbook(8,false,magneticTable,log),bundle,[magneticTable]);
+  assert.equal(engine.apply(bundle,magneticPayload,{allowedTables:[magneticTable]}).added,1);
+  assert.deepEqual(bundle.tables[magneticTable][0],log);
   console.log('XLSX stored/deflated workbook, typed fields and rejection of formulas: OK');
 })().catch(error=>{console.error(error);process.exitCode=1});

@@ -3,7 +3,7 @@ const ObservationImport = (() => {
   const keys = {
     borehole_collars:['hole_id'], borehole_lithology:['interval_id'],
     borehole_assays:['sample_id','analyte'], downhole_properties:['measurement_id'],
-    downhole_gamma:['measurement_id'], structural_observations:['observation_id'],
+    downhole_gamma:['measurement_id'], downhole_magnetic:['measurement_id'], structural_observations:['observation_id'],
     surface_geochemistry:['sample_id','analyte'], outcrop_observations:['observation_id'],
     terrain_observations:['observation_id'], magnetic_observations:['observation_id'],
     gamma_observations:['observation_id'], trenches:['trench_id'],
@@ -11,7 +11,7 @@ const ObservationImport = (() => {
     fault_intersections:['observation_id'], quality_control:['control_id'],
   };
   const pointTables = ['surface_geochemistry','outcrop_observations','terrain_observations','magnetic_observations','gamma_observations'];
-  const boreholeTables = ['borehole_collars','borehole_lithology','borehole_assays','downhole_properties','downhole_gamma','structural_observations','fault_intersections'];
+  const boreholeTables = ['borehole_collars','borehole_lithology','borehole_assays','downhole_properties','structural_observations','fault_intersections','downhole_gamma','downhole_magnetic'];
   const sampleTables = ['borehole_assays','trench_samples','surface_geochemistry'];
   const assayTables = [...sampleTables,'quality_control'];
   const required = {
@@ -20,6 +20,7 @@ const ObservationImport = (() => {
     borehole_assays:'sample_id hole_id from_m to_m analyte result_value unit detection_limit analysis_method laboratory certificate_id qc_type qc_flag',
     downhole_properties:'hole_id measurement_id measurement_method qc_flag',
     downhole_gamma:'hole_id measurement_id from_m to_m depth_m gamma_count_rate_cps gamma_sigma_cps counting_time_s measurement_method logged_date',
+    downhole_magnetic:'hole_id measurement_id from_m to_m depth_m magnetic_susceptibility_si magnetic_sigma_si measurement_method logged_date',
     structural_observations:'observation_id feature_type confidence observation_method',
     surface_geochemistry:'sample_id x_m y_m sample_date sample_material sampling_depth_from_m sampling_depth_to_m sampling_method analyte result_value unit detection_limit analysis_method laboratory certificate_id position_uncertainty_m qc_type qc_flag',
     outcrop_observations:'observation_id x_m y_m surface_elevation_m observed_rock_id observed_rock_name observation_method position_uncertainty_m survey_date',
@@ -41,8 +42,8 @@ const ObservationImport = (() => {
     terrain_type:['flat','slope','hill','depression','undetermined'],
     sample_material:['soil','rock','regolith'], sample_source:['borehole','trench','surface'],
   };
-  const numbers = new Set('x_m y_m collar_elevation_m total_depth_m azimuth_deg dip_deg position_uncertainty_m from_m to_m depth_m density_g_cm3 porosity_percent density_error_g_cm3 porosity_error_percent strike_deg dip_direction_deg offset_estimate_m sampling_depth_from_m sampling_depth_to_m result_value detection_limit surface_elevation_m elevation_uncertainty_m slope_deg local_relief_m magnetic_anomaly_nt magnetic_sigma_nt gamma_count_rate_cps gamma_sigma_cps counting_time_s start_x_m start_y_m end_x_m end_y_m width_m surveyed_length_m reference_value reference_uncertainty absolute_difference relative_difference_percent acceptance_limit'.split(' '));
-  const signed = new Set('x_m y_m start_x_m start_y_m end_x_m end_y_m collar_elevation_m surface_elevation_m magnetic_anomaly_nt local_relief_m dip_deg offset_estimate_m absolute_difference relative_difference_percent'.split(' '));
+  const numbers = new Set('x_m y_m collar_elevation_m total_depth_m azimuth_deg dip_deg position_uncertainty_m from_m to_m depth_m density_g_cm3 porosity_percent density_error_g_cm3 porosity_error_percent strike_deg dip_direction_deg offset_estimate_m sampling_depth_from_m sampling_depth_to_m result_value detection_limit surface_elevation_m elevation_uncertainty_m slope_deg local_relief_m magnetic_anomaly_nt magnetic_sigma_nt magnetic_susceptibility_si magnetic_sigma_si gamma_count_rate_cps gamma_sigma_cps counting_time_s start_x_m start_y_m end_x_m end_y_m width_m surveyed_length_m reference_value reference_uncertainty absolute_difference relative_difference_percent acceptance_limit'.split(' '));
+  const signed = new Set('x_m y_m start_x_m start_y_m end_x_m end_y_m collar_elevation_m surface_elevation_m magnetic_anomaly_nt magnetic_susceptibility_si local_relief_m dip_deg offset_estimate_m absolute_difference relative_difference_percent'.split(' '));
   const fail = message => { throw new Error(message); };
   const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
   const recordKey = (table,row) => JSON.stringify(keys[table].map(k=>row[k]));
@@ -373,6 +374,9 @@ const ObservationImport = (() => {
       positive('counting_time_s');
       assert(Math.abs(row.depth_m-(row.from_m+row.to_m)/2)<=1e-5,'depth_m: должна быть середина интервала');
     }
+    if(table==='downhole_magnetic'){
+      assert(Math.abs(row.depth_m-(row.from_m+row.to_m)/2)<=1e-5,'depth_m: должна быть середина интервала');
+    }
     if(table==='structural_observations'){
       if(row.hole_id)assert(row.depth_m!=null,'Для скважинной структуры нужна depth_m');
       else {xy(row.x_m,row.y_m);assert(row.depth_m==null,'Для поверхностной структуры не указывается скважинная глубина');}
@@ -439,7 +443,7 @@ const ObservationImport = (() => {
       return {hole_count:rows.length,drilled_m:Number(rows.reduce((n,r)=>n+r.total_depth_m,0).toFixed(6)),
         sample_count:unique(selected('borehole_assays'),'sample_id'),assay_count:selected('borehole_assays').length,
         lithology_count:selected('borehole_lithology').length,property_count:selected('downhole_properties').length,
-        gamma_log_count:selected('downhole_gamma').length,contact_count:selected('structural_observations').filter(r=>r.feature_type==='contact').length,
+        gamma_log_count:selected('downhole_gamma').length,magnetic_log_count:selected('downhole_magnetic').length,contact_count:selected('structural_observations').filter(r=>r.feature_type==='contact').length,
         fault_observation_count:selected('fault_intersections').length};
     };
     const holes=t.borehole_collars||[],vertical=holes.filter(r=>r.dip_deg===-90), inclined=holes.filter(r=>r.dip_deg!==-90);
@@ -512,7 +516,7 @@ const ObservationImport = (() => {
     if(payload.sourceKind)assert(['vertical_boreholes','inclined_boreholes'].includes(payload.sourceKind),'Неизвестный тип источника бурения');
     const kind=sourceKind||payload.sourceKind;
     if(sourceKind&&payload.sourceKind)assert(sourceKind===payload.sourceKind,'Тип источника файла не совпадает с выбранным источником');
-    const intervalTables=['borehole_lithology','trench_intervals','downhole_properties','downhole_gamma','borehole_assays','trench_samples'];
+    const intervalTables=['borehole_lithology','trench_intervals','downhole_properties','downhole_gamma','downhole_magnetic','borehole_assays','trench_samples'];
     const intervalGroups={};
     const intervalKey=(table,row)=>JSON.stringify([row.hole_id??row.trench_id,assayTables.includes(table)?row.analyte:null]);
     for(const table of intervalTables)if(additions[table]?.length){

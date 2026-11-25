@@ -1,22 +1,24 @@
 """Preliminary survey and fieldwork panels built from public observations."""
 
 METHODS_STYLES = r'''
-    .method-sections { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 18px; }
-    .method-section { width: auto; padding: 10px 18px; border-radius: 10px; font-size: 13px; }
-    .method-section[aria-pressed="true"] { color: white; background: var(--navy); border-color: var(--navy); }
-    .method-overview { margin-bottom: 18px; }
+    .method-sections { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; margin: 0 0 18px; }
+    .method-section { width: auto; min-height: 40px; padding: 9px 16px; font-size: 13px; }
+    .method-section[aria-pressed="true"] { color: white; background: var(--accent); border-color: var(--accent); }
+    .method-section[aria-pressed="true"]:hover { background: var(--accent-hover); color: white; }
+    .method-overview { margin-bottom: 16px; }
     .method-overview p { color: var(--muted); font-size: 12px; line-height: 1.7; }
     .method-map { width: 100%; height: 300px; display: block; }
     .method-toolbar { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
-    .method-toolbar select { width: auto; max-width: 260px; }
+    .method-toolbar select { width: auto; max-width: min(100%, 260px); }
     .method-profile { width: 100%; height: 190px; display: block; }
-    .data-downloads { display: flex; gap: 8px; flex-wrap: wrap; }
-    .data-filters input { display: block; width: 170px; min-height: 38px; border: 1px solid var(--line); border-radius: 9px; margin-top: 5px; padding: 7px 10px; font: inherit; }
-    .qc-metrics { display: flex; flex-wrap: wrap; gap: 18px; margin: 18px 0; }
-    .qc-metrics span { padding: 12px 18px; border-radius: 10px; background: #f2f6fa; color: var(--navy); font-size: 13px; }
-    .qc-metrics b { font-size: 23px; margin-right: 8px; }
-    .qc-metrics .qc-fail { background: #fff0ed; color: #a93e2b; }
-    .qc-metrics .qc-warning { background: #fff7e7; color: #87641f; }
+    .data-downloads { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; }
+    .data-downloads button { width: auto; }
+    .data-filters input { display: block; width: 100%; min-height: 38px; border: 1px solid var(--line); border-radius: 3px; margin-top: 5px; padding: 7px 10px; background: var(--surface); color: var(--text); font: inherit; }
+    .qc-metrics { display: flex; flex-wrap: wrap; gap: 1px; border: 1px solid var(--line); background: var(--line); margin: 18px 0; }
+    .qc-metrics span { flex: 1 1 145px; padding: 12px 16px; background: var(--surface); color: var(--ink); font-size: 13px; }
+    .qc-metrics b { font-size: 23px; margin-right: 8px; font-variant-numeric: tabular-nums; }
+    .qc-metrics .qc-fail { background: #f6e6df; color: #a93e2b; }
+    .qc-metrics .qc-warning { background: #f5edda; color: #765719; }
 '''
 
 FIELD_METHODS_HTML = r'''
@@ -85,6 +87,7 @@ METHODS_SCRIPT = r'''
         quality: {label: 'Контроль качества', panel: 'qualityOverview', tables: ['quality_control']}
       };
       if (observations.table_fields.downhole_gamma) sections.boreholes.tables.push('downhole_gamma');
+      if (observations.table_fields.downhole_magnetic) sections.boreholes.tables.push('downhole_magnetic');
       const sectionButtons = addMethodButtons(sections, 'expeditionSections', activateSection);
       let activeSection = 'boreholes';
       const trenches = tables.trenches || [];
@@ -140,7 +143,7 @@ METHODS_SCRIPT = r'''
           const strength = maximum === minimum ? .5 : (row.result_value - minimum) / (maximum - minimum);
           const color = below ? '#b7c9d5' : `hsl(${190 - 170 * strength}, 65%, 48%)`;
           const current = row.sample_id === selected;
-          markup += `<circle class="hole-dot" role="button" tabindex="0" aria-label="${escape(row.sample_id)}" aria-pressed="${current}" data-sample="${escape(row.sample_id)}" cx="${point.x}" cy="${point.y}" r="${current ? 7 : 5}" fill="${color}" stroke="${current ? '#e95e2a' : 'white'}" stroke-width="${current ? 3 : 1}"><title>${escape(row.sample_id)}: ${below ? '&lt; ' : ''}${number(row.result_value)} ${escape(row.unit)}</title></circle>`;
+          markup += `<circle class="hole-dot" role="button" tabindex="0" aria-label="${escape(row.sample_id)}" aria-pressed="${current}" data-sample="${escape(row.sample_id)}" cx="${point.x}" cy="${point.y}" r="${current ? 7 : 5}" fill="${color}" stroke="${current ? '#a35a35' : 'white'}" stroke-width="${current ? 3 : 1}"><title>${escape(row.sample_id)}: ${below ? '&lt; ' : ''}${number(row.result_value)} ${escape(row.unit)}</title></circle>`;
         }
         element('surfaceMap').innerHTML = markup;
         element('surfaceCaption').textContent = `${summary.surface_sample_count || 0} почвенных проб · нажмите на точку для просмотра её анализов`;
@@ -173,7 +176,7 @@ METHODS_SCRIPT = r'''
         let markup = frame.markup;
         for (const trench of trenches) {
           const start = frame.point(trench.start_x_m, trench.start_y_m), end = frame.point(trench.end_x_m, trench.end_y_m);
-          markup += `<line class="hole-dot" role="button" tabindex="0" aria-label="${escape(trench.trench_id)}" data-trench="${escape(trench.trench_id)}" x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}" stroke="${trench.trench_id === selectedTrench ? '#e95e2a' : '#1677a8'}" stroke-width="7" stroke-linecap="round"><title>${escape(trench.trench_id)} · ${number(trench.surveyed_length_m)} м</title></line>`;
+          markup += `<line class="hole-dot" role="button" tabindex="0" aria-label="${escape(trench.trench_id)}" data-trench="${escape(trench.trench_id)}" x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}" stroke="${trench.trench_id === selectedTrench ? '#a35a35' : '#355d48'}" stroke-width="7" stroke-linecap="round"><title>${escape(trench.trench_id)} · ${number(trench.surveyed_length_m)} м</title></line>`;
         }
         element('trenchMap').innerHTML = markup;
         const trench = trenches.find(row => row.trench_id === selectedTrench);
@@ -187,13 +190,13 @@ METHODS_SCRIPT = r'''
         const assays = (tables.trench_samples || []).filter(row => row.trench_id === selectedTrench && row.analyte === element('trenchProfileAnalyte').value);
         const scale = 600 / trench.surveyed_length_m;
         const maximum = Math.max(0, ...assays.map(row => row.result_value));
-        let profile = '<text x="50" y="20" font-size="11" fill="#486581">Наблюдённые породы у дна</text>';
+        let profile = '<text x="50" y="20" font-size="11" fill="#555e50">Наблюдённые породы у дна</text>';
         for (const log of logs) profile += `<rect x="${50 + log.from_m * scale}" y="30" width="${(log.to_m - log.from_m) * scale}" height="27" fill="${escape(rocks[log.observed_rock_id]?.color || '#b7c9d5')}"><title>${escape(log.observed_rock_name)} · ${number(log.from_m)}–${number(log.to_m)} м</title></rect>`;
         for (const row of assays) {
           const h = Math.max(1, row.result_value / (maximum || 1) * 65);
           profile += `<rect x="${50 + row.from_m * scale}" y="${135 - h}" width="${Math.max(.5, (row.to_m - row.from_m) * scale - .5)}" height="${h}" fill="${row.result_qualifier === 'lt' ? '#b7c9d5' : '#168c86'}"><title>${number(row.from_m)}–${number(row.to_m)} м: ${row.result_qualifier === 'lt' ? '&lt; ' : ''}${number(row.result_value)} ${escape(row.unit)}</title></rect>`;
         }
-        profile += `<text x="50" y="160" font-size="11" fill="#627d98">0 м</text><text x="650" y="160" text-anchor="end" font-size="11" fill="#627d98">${number(trench.surveyed_length_m)} м · ${assays.length ? `максимум ${number(maximum)} ${escape(assays[0].unit)}` : 'нет результатов проб'}</text>`;
+        profile += `<text x="50" y="160" font-size="11" fill="#62675e">0 м</text><text x="650" y="160" text-anchor="end" font-size="11" fill="#62675e">${number(trench.surveyed_length_m)} м · ${assays.length ? `максимум ${number(maximum)} ${escape(assays[0].unit)}` : 'нет результатов проб'}</text>`;
         element('trenchProfile').innerHTML = profile;
       }
       function selectTrench(identifier) {

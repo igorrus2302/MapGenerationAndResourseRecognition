@@ -20,6 +20,7 @@ class BoreholeSourceTests(unittest.TestCase):
         self.truth["faults"] = [{"trace_center_m": [0, 5], "strike_deg": 0, "dip_deg": 45, "influence_width_m": 1}]
         self.config["structures"] = {"enabled": True, "observe_faults": True}
         self.config["downhole_gamma"] = {"enabled": True, "interval_m": 1}
+        self.config["downhole_magnetic"] = {"enabled": True, "interval_m": 1}
         self.bundle = generate_observations(self.truth, self.config, seed=12)
 
     def test_sources_partition_all_borehole_observations_without_duplicates(self):
@@ -39,6 +40,7 @@ class BoreholeSourceTests(unittest.TestCase):
             self.assertEqual(pack["summary"]["drilled_m"], 16)
             self.assertEqual(pack["summary"]["assay_count"], len(pack["tables"]["borehole_assays"]))
             self.assertEqual(pack["summary"]["gamma_log_count"], 16)
+            self.assertEqual(pack["summary"]["magnetic_log_count"], 16)
             for rows in pack["tables"].values():
                 self.assertTrue(all(row["hole_id"] in source["hole_ids"] for row in rows))
 
@@ -98,6 +100,7 @@ class BoreholeSourceTests(unittest.TestCase):
             self.assertTrue(pack["tables"]["borehole_collars"])
             self.assertTrue(pack["tables"]["borehole_lithology"])
             self.assertEqual(len(pack["tables"]["downhole_gamma"]), 16)
+            self.assertEqual(len(pack["tables"]["downhole_magnetic"]), 16)
 
     def test_source_edits_do_not_change_combined_observations(self):
         before = deepcopy(self.bundle)

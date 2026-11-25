@@ -14,7 +14,7 @@ from typing import Any
 
 from .boreholes import point as borehole_point
 from .reconstruction import reconstruct_map
-from .recognition_geophysics import GEOPHYSICAL_SIGNALS, DownholeGammaEvidence, GeophysicalEvidence
+from .recognition_geophysics import GEOPHYSICAL_SIGNALS, DownholeGammaEvidence, DownholeMagneticEvidence, GeophysicalEvidence
 from .recognition_terrain import SHALLOW_DEPTH_M, TERRAIN_SIGNALS, TerrainEvidence
 
 
@@ -329,6 +329,7 @@ def recognize_deposits(observations: dict[str, Any], mineral_catalog: dict[str, 
     terrain = TerrainEvidence(observations)
     geophysics = GeophysicalEvidence(observations)
     gamma_log = DownholeGammaEvidence(observations)
+    magnetic_log = DownholeMagneticEvidence(observations, mineral_catalog, rock_catalog)
 
     # Use the nominal surface spacing as the radius for corroboration in XY only.
     point_count = len({row["sample_id"] for row in soil_rows})
@@ -357,6 +358,7 @@ def recognize_deposits(observations: dict[str, Any], mineral_catalog: dict[str, 
         terrain.annotate(target, rules_by_id.get(target.get("mineral_id")))
         geophysics.annotate(target)
         gamma_log.annotate(target)
+        magnetic_log.annotate(target)
 
     def target_order(item):
         signals = set(item["supporting_signals"])
@@ -369,7 +371,7 @@ def recognize_deposits(observations: dict[str, Any], mineral_catalog: dict[str, 
     for index, target in enumerate(targets, 1):
         target["target_id"] = f"TARGET-{index:04d}"
     return {
-        "data_kind": "exploration_recognition", "schema_version": "1.4", "campaign": campaign,
+        "data_kind": "exploration_recognition", "schema_version": "1.5", "campaign": campaign,
         "reconstructed_map": reconstruct_map(observations, targets, mineral_catalog, rock_catalog=rock_catalog),
         "vertical_reference": "depth_positive_down_from_surface", "targets": targets,
         "summary": {"mineralized_intervals": len(targets) - len(soil), "soil_anomalies": len(soil),
@@ -378,6 +380,8 @@ def recognize_deposits(observations: dict[str, Any], mineral_catalog: dict[str, 
                     "geophysical_anomaly_count": len(geophysics.anomalies),
                     "downhole_gamma_anomaly_count": sum(len(rows) for rows in gamma_log.anomalies.values()),
                     "targets_supported_by_downhole_gamma": sum("downhole_gamma_evidence" in item for item in targets),
+                    "downhole_magnetic_anomaly_count": sum(len(rows) for rows in magnetic_log.anomalies.values()),
+                    "targets_supported_by_downhole_magnetic": sum("downhole_magnetic_evidence" in item for item in targets),
                     "targets_supported_by_geophysics": sum(not GEOPHYSICAL_SIGNALS.isdisjoint(item["supporting_signals"]) for item in targets),
                     "assays_by_source": {source: {status: values[status] for status in
                                         ("primary", "quantified", "below_detection", "failed_qc")}
@@ -389,6 +393,8 @@ def recognize_deposits(observations: dict[str, Any], mineral_catalog: dict[str, 
         "terrain_rules": {"max_depth_m": SHALLOW_DEPTH_M, "search_radius_m": terrain.radius_m},
         "geophysical_anomalies": geophysics.anomalies,
         "geophysical_backgrounds": geophysics.backgrounds,
+        "downhole_magnetic_anomalies": [row for rows in magnetic_log.anomalies.values() for row in rows],
+        "downhole_magnetic_backgrounds": magnetic_log.backgrounds,
         "geophysical_search_radius_m": geophysics.radius_m,
         "laboratory_alerts": [{"analyte": analyte, "unit": unit, **alerts}
                               for (analyte, unit), alerts in sorted(lab_alerts.items())],

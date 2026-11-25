@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.8",
+  "schema_version": "1.9",
   "data_kind": "borehole_observation_source",
   "source": {
     "source_id": "EXAMPLE-CAMPAIGN:inclined_boreholes",
@@ -16,7 +16,8 @@
       "downhole_properties",
       "structural_observations",
       "fault_intersections",
-      "downhole_gamma"
+      "downhole_gamma",
+      "downhole_magnetic"
     ],
     "summary": {
       "hole_count": 1,
@@ -27,7 +28,8 @@
       "property_count": 1,
       "contact_count": 1,
       "fault_observation_count": 0,
-      "gamma_log_count": 3
+      "gamma_log_count": 3,
+      "magnetic_log_count": 3
     }
   },
   "campaign": {
@@ -57,6 +59,11 @@
         "interval_m": 1,
         "sigma_cps": 0.2,
         "counting_time_s": 60
+      },
+      "downhole_magnetic": {
+        "enabled": true,
+        "interval_m": 1.0,
+        "sigma_si": 5e-05
       }
     }
   },
@@ -69,7 +76,8 @@
     "property_count": 1,
     "contact_count": 1,
     "fault_observation_count": 0,
-    "gamma_log_count": 3
+    "gamma_log_count": 3,
+    "magnetic_log_count": 3
   },
   "notes": [
     "Демонстрационные записи EXAMPLE-* нужно заменить собственными наблюдениями.",
@@ -187,6 +195,18 @@
       "gamma_count_rate_cps",
       "gamma_sigma_cps",
       "counting_time_s",
+      "measurement_method",
+      "logged_date"
+    ],
+    "downhole_magnetic": [
+      "campaign_id",
+      "hole_id",
+      "measurement_id",
+      "from_m",
+      "to_m",
+      "depth_m",
+      "magnetic_susceptibility_si",
+      "magnetic_sigma_si",
       "measurement_method",
       "logged_date"
     ]
@@ -334,6 +354,44 @@
         "gamma_sigma_cps": 0.5,
         "counting_time_s": 60,
         "measurement_method": "synthetic_gamma_logging",
+        "logged_date": "2026-01-20"
+      }
+    ],
+    "downhole_magnetic": [
+      {
+        "campaign_id": "EXAMPLE-CAMPAIGN",
+        "hole_id": "EXAMPLE-I-BH-001",
+        "measurement_id": "EXAMPLE-I-BH-001-M0001",
+        "from_m": 19.0,
+        "to_m": 20.0,
+        "depth_m": 19.5,
+        "magnetic_susceptibility_si": 0.00015,
+        "magnetic_sigma_si": 5e-05,
+        "measurement_method": "synthetic_magnetic_logging",
+        "logged_date": "2026-01-20"
+      },
+      {
+        "campaign_id": "EXAMPLE-CAMPAIGN",
+        "hole_id": "EXAMPLE-I-BH-001",
+        "measurement_id": "EXAMPLE-I-BH-001-M0002",
+        "from_m": 20.0,
+        "to_m": 21.0,
+        "depth_m": 20.5,
+        "magnetic_susceptibility_si": 0.0012,
+        "magnetic_sigma_si": 5e-05,
+        "measurement_method": "synthetic_magnetic_logging",
+        "logged_date": "2026-01-20"
+      },
+      {
+        "campaign_id": "EXAMPLE-CAMPAIGN",
+        "hole_id": "EXAMPLE-I-BH-001",
+        "measurement_id": "EXAMPLE-I-BH-001-M0003",
+        "from_m": 21.0,
+        "to_m": 22.0,
+        "depth_m": 21.5,
+        "magnetic_susceptibility_si": 0.0021,
+        "magnetic_sigma_si": 5e-05,
+        "measurement_method": "synthetic_magnetic_logging",
         "logged_date": "2026-01-20"
       }
     ]

@@ -11,7 +11,7 @@ from .recognition_spatial import index_points, nearest_point, survey_radius
 
 
 METHOD_RULES = {"iron": ("magnetic", 150.0), "uranium": ("gamma", 2.0)}
-GEOPHYSICAL_SIGNALS = {"geophysics_magnetic", "geophysics_gamma", "downhole_gamma_anomaly"}
+GEOPHYSICAL_SIGNALS = {"geophysics_magnetic", "geophysics_gamma", "downhole_gamma_anomaly", "downhole_magnetic_anomaly"}
 UNITS = {"magnetic": "nT", "gamma": "cps"}
 FLOOR_DEVIATION = {"magnetic": 8, "gamma": 4}
 MIN_MEASUREMENTS = 8
@@ -128,3 +128,86 @@ class DownholeGammaEvidence:
                 "peak_measured_cps": peak["gamma_count_rate_cps"],
                 "background_cps": peak["background_value"],
             }
+
+
+class DownholeMagneticEvidence:
+    """Corroborate assays with positive susceptibility excursions along the same borehole."""
+
+    FLOOR_SI = 0.001
+
+    def __init__(self, observations, mineral_catalog, rock_catalog=None):
+        self.magnetic_minerals = {item["id"] for item in mineral_catalog["minerals"]
+                                  if item.get("geophysical_source", {}).get("magnetic_susceptibility_si", 0) > 0}
+        self.rock_susceptibility = {item["id"]: item["geophysical_source"]["magnetic_susceptibility_si"]
+                                     for item in (rock_catalog or {}).get("rocks", ())
+                                     if "magnetic_susceptibility_si" in item.get("geophysical_source", {})}
+        profiles, lithology = defaultdict(list), defaultdict(list)
+        self.anomalies = defaultdict(list)
+        self.backgrounds = []
+        for row in observations["tables"].get("downhole_magnetic", ()):
+            if row.get("magnetic_susceptibility_si") is not None:
+                profiles[row["hole_id"]].append(row)
+        for row in observations["tables"].get("borehole_lithology", ()):
+            lithology[row["hole_id"]].append(row)
+        for hole_id, rows in profiles.items():
+            rows.sort(key=lambda row: row["from_m"])
+            stats = {"hole_id": hole_id, "measurement_count": len(rows), "unit": "SI",
+                     "status": "insufficient_measurements"}
+            self.backgrounds.append(stats)
+            if len(rows) < MIN_MEASUREMENTS:
+                continue
+            expected = [self._lithology_background(row, lithology[hole_id]) for row in rows]
+            # Remove known rock-type contrasts when a complete lithological reference is available.
+            # Otherwise use the robust measured borehole background (no ground truth is consulted).
+            use_lithology = all(value is not None for value in expected)
+            baseline = expected if use_lithology else [0.0] * len(rows)
+            residuals = [row["magnetic_susceptibility_si"] - value for row, value in zip(rows, baseline)]
+            offset = median(residuals)
+            mad = median(abs(value - offset) for value in residuals)
+            threshold = max(self.FLOOR_SI, 3.5 * 1.4826 * mad,
+                            3 * median(row.get("magnetic_sigma_si") or 0 for row in rows))
+            method = "lithology_reference" if use_lithology else "borehole_median"
+            stats.update(status="estimated", background_method=method, median_residual_si=offset,
+                         mad_si=mad, deviation_threshold_si=threshold)
+            for row, value in zip(rows, baseline):
+                background = value + offset
+                deviation = row["magnetic_susceptibility_si"] - background
+                required = max(threshold, 3 * (row.get("magnetic_sigma_si") or 0))
+                if deviation >= required:
+                    self.anomalies[hole_id].append({**row, "background_susceptibility_si": background,
+                                                     "deviation_si": deviation, "deviation_threshold_si": required,
+                                                     "background_method": method})
+
+    def _lithology_background(self, row, intervals):
+        start, end = row["from_m"], row["to_m"]
+        weighted = covered = 0.0
+        for interval in intervals:
+            overlap = min(end, interval["to_m"]) - max(start, interval["from_m"])
+            if overlap <= 0:
+                continue
+            value = self.rock_susceptibility.get(interval["observed_rock_id"])
+            if value is None:
+                return None
+            weighted += overlap * value
+            covered += overlap
+        if end <= start or abs(covered - (end - start)) > 1e-6:
+            return None
+        return weighted / (end - start)
+
+    def annotate(self, target):
+        if target["source"] != "borehole" or target.get("mineral_id") not in self.magnetic_minerals:
+            return
+        matches = [row for row in self.anomalies.get(target["site_id"], ())
+                   if max(row["from_m"], target["from_m"]) < min(row["to_m"], target["to_m"])]
+        if not matches:
+            return
+        peak = max(matches, key=lambda row: row["deviation_si"])
+        target["supporting_signals"].append("downhole_magnetic_anomaly")
+        target["downhole_magnetic_evidence"] = {
+            "measurement_ids": [row["measurement_id"] for row in matches],
+            "peak_measured_si": peak["magnetic_susceptibility_si"],
+            "background_si": peak["background_susceptibility_si"],
+            "peak_deviation_si": peak["deviation_si"],
+            "deviation_threshold_si": peak["deviation_threshold_si"],
+            "background_method": peak["background_method"],
+        }

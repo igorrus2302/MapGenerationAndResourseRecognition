@@ -9,6 +9,7 @@ from typing import Any
 from .expedition_view import WORKSPACE_PANELS, WORKSPACE_SCRIPT, WORKSPACE_STYLES, WORKSPACE_TABS
 from .geophysical_observations import GEOPHYSICAL_TABLES, LEGACY_GEOPHYSICAL_TABLE, split_legacy_geophysical_bundle
 from .observation_models import EXTRA_TABLE_FIELDS, prepare_preliminary_survey
+from .observations import with_magnetic_log_schema
 
 HTML_TEMPLATE = r'''<!doctype html>
 <html lang="ru">
@@ -18,141 +19,125 @@ HTML_TEMPLATE = r'''<!doctype html>
   <title>Геологическая разведка — карта и экспедиция</title>
   <style>
     :root {
-      --navy: #102a43;
-      --blue: #1677a8;
-      --cyan: #2bb3d6;
-      --teal: #168c86;
-      --orange: #e95e2a;
-      --paper: #f6f8fb;
-      --line: #d8e0e8;
-      --muted: #627d98;
-      --text: #243b53;
+      --ink: #25362e;
+      --accent: #355d48;
+      --accent-hover: #284b39;
+      --highlight: #a35a35;
+      --paper: #f1efe7;
+      --surface: #fdfcf8;
+      --surface-muted: #e9e6dc;
+      --accent-tint: #e4ebe2;
+      --line: #cccac0;
+      --muted: #62675e;
+      --text: #30382f;
+      --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      --heading: Georgia, "Times New Roman", serif;
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body {
-      color: var(--text);
-      background: var(--paper);
-      font: 14px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      overflow: hidden;
+      display: flex; flex-direction: column;
+      color: var(--text); background: var(--paper);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden; color-scheme: light;
     }
     header {
-      height: 70px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 24px;
-      padding: 0 26px;
-      color: white;
-      background: linear-gradient(120deg, #102a43, #164b6b 70%, #1677a8);
-      box-shadow: 0 4px 18px rgba(16, 42, 67, .22);
+      flex: 0 0 auto; min-height: 62px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 12px 26px; text-align: center;
+      background: var(--surface); border-bottom: 1px solid var(--line);
     }
-    .brand { display: flex; align-items: center; gap: 13px; min-width: 0; }
-    .brand-mark {
-      width: 40px; height: 40px; border-radius: 11px;
-      background: linear-gradient(145deg, #36c2df, #168c86);
-      display: grid; place-items: center; font-weight: 800; font-size: 18px;
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,.28);
-    }
-    .brand h1 { margin: 0; font-size: 18px; line-height: 1.2; }
-    .brand p { margin: 3px 0 0; color: #cfe5f1; font-size: 12px; }
-    .header-stats { display: flex; gap: 8px; flex-wrap: wrap; justify-content: end; }
-    .header-stats span {
-      padding: 6px 10px; border: 1px solid rgba(255,255,255,.16);
-      border-radius: 999px; color: #e5f4fb; background: rgba(255,255,255,.08);
-      font-size: 12px; white-space: nowrap;
-    }
-    .layout { height: calc(100% - 70px); display: grid; grid-template-columns: 300px 1fr; }
+    header h1 { margin: 0; color: var(--ink); font: 600 22px/1.2 var(--heading); }
+    .layout { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: 284px minmax(0, 1fr); }
     aside {
-      overflow: auto;
-      padding: 20px 18px 28px;
-      background: white;
-      border-right: 1px solid var(--line);
+      min-width: 0; overflow: auto; padding: 22px 18px 26px;
+      background: var(--surface); border-right: 1px solid var(--line);
     }
-    .control-group { margin-bottom: 20px; }
+    .control-group { margin-bottom: 20px; padding-bottom: 17px; border-bottom: 1px solid var(--line); }
     .control-group h2 {
-      margin: 0 0 9px; color: var(--navy); font-size: 12px;
-      letter-spacing: .07em; text-transform: uppercase;
+      margin: 0 0 11px; color: var(--ink); font-size: 11px; font-weight: 700;
+      letter-spacing: .075em; text-transform: uppercase;
     }
+    .map-dimensions { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; color: var(--muted); font-size: 12px; }
+    .map-dimensions strong { color: var(--text); text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .map-seed { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--surface-muted); grid-template-columns: auto minmax(0, 1fr); }
+    .map-seed strong { font: 600 11px/1.5 var(--mono); overflow-wrap: anywhere; }
     label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
     select, button {
-      width: 100%; min-height: 38px; border: 1px solid var(--line); border-radius: 9px;
-      background: white; color: var(--text); padding: 7px 10px; font: inherit;
+      width: 100%; max-width: 100%; min-width: 0; min-height: 38px;
+      border: 1px solid var(--line); border-radius: 3px;
+      background: var(--surface); color: var(--text); padding: 8px 11px; font: inherit;
     }
-    button { cursor: pointer; font-weight: 650; transition: .15s ease; }
-    button:hover { border-color: var(--blue); color: var(--blue); }
-    .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    input[type="range"] { width: 100%; accent-color: var(--blue); }
-    .range-line { display: flex; justify-content: space-between; align-items: center; margin-top: 2px; }
-    .value-badge {
-      color: var(--blue); background: #eaf5fa; border-radius: 7px;
-      padding: 3px 7px; font-size: 12px; font-weight: 700;
+    select { cursor: pointer; }
+    button { cursor: pointer; font-weight: 600; font-size: 13px; transition: background .12s, border-color .12s, color .12s; }
+    button:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-tint); color: var(--ink); }
+    button:focus-visible, select:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--highlight); outline-offset: 2px;
     }
-    .legend-list { display: grid; gap: 7px; }
+    input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
+    input[type="range"] { width: 100%; }
+    .button-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .range-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 5px; }
+    .value-badge { color: var(--accent); font: 600 12px/1.4 var(--mono); text-align: right; }
+    .legend-list { display: grid; }
     .legend-item {
-      display: grid; grid-template-columns: 18px 1fr auto; gap: 8px; align-items: center;
-      padding: 7px 8px; border: 1px solid #e8edf2; border-radius: 9px;
+      display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 8px; align-items: center;
+      padding: 7px 3px; margin: 0; border-bottom: 1px solid var(--surface-muted); color: var(--text);
       cursor: pointer; user-select: none;
     }
-    .legend-item:hover { background: #f7fafc; }
-    .swatch { width: 16px; height: 16px; border-radius: 5px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.13); }
+    .legend-item:last-child { border-bottom: 0; }
+    .legend-item:hover { background: var(--paper); }
+    .swatch { width: 14px; height: 14px; border: 1px solid #0002; border-radius: 1px; }
     .legend-item input { margin: 0; }
     .switch-line { display: flex; align-items: center; gap: 9px; color: var(--text); font-size: 13px; }
-    .switch-line input { accent-color: var(--orange); }
     .info-card {
-      min-height: 118px; padding: 12px; border-radius: 11px;
-      background: linear-gradient(145deg, #f7fafc, #eef5f8); border: 1px solid var(--line);
-      color: var(--muted); font-size: 12px;
+      min-height: 100px; padding: 12px; background: var(--paper); border-left: 2px solid var(--highlight);
+      color: var(--muted); font-size: 12px; overflow-wrap: anywhere;
     }
-    .info-card strong { display: block; color: var(--navy); margin-bottom: 5px; font-size: 13px; }
-    .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; }
-    .info-grid b { color: var(--text); font-weight: 600; text-align: right; }
-    main { min-width: 0; min-height: 0; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
-    .viewer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
-    .viewer-toolbar h2 { margin: 0; color: var(--navy); font-size: 16px; }
-    .status-pill {
-      padding: 5px 9px; border-radius: 999px; color: #11665f; background: #e9f6f4;
-      border: 1px solid #bce4df; font-size: 12px; font-weight: 650;
-    }
+    .info-card strong { display: block; color: var(--ink); margin-bottom: 5px; font-size: 13px; }
+    .info-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 3px 8px; }
+    .info-grid b { color: var(--text); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+    main { min-width: 0; min-height: 0; padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 14px; }
+    .viewer-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+    .viewer-toolbar h2 { margin: 0; color: var(--ink); font: 500 22px/1.2 var(--heading); }
     .canvas-shell {
       position: relative; flex: 1; min-height: 0; overflow: hidden;
-      border: 1px solid var(--line); border-radius: 15px;
-      background: white; box-shadow: 0 10px 34px rgba(16, 42, 67, .08);
+      border: 1px solid var(--line); background: var(--surface);
     }
     canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
     .canvas-hint {
-      position: absolute; right: 12px; bottom: 12px; max-width: 360px;
-      padding: 7px 10px; border-radius: 8px; color: #536b80;
-      background: rgba(255,255,255,.91); border: 1px solid rgba(203,213,225,.9);
-      font-size: 11px; pointer-events: none; backdrop-filter: blur(4px);
+      position: absolute; right: 10px; bottom: 10px; max-width: min(360px, calc(100% - 20px));
+      padding: 7px 10px; color: var(--muted); background: var(--surface); border: 1px solid var(--line);
+      font-size: 11px; pointer-events: none;
     }
     .hidden { display: none !important; }
     @media (max-width: 860px) {
-      body { overflow: auto; }
-      header { height: auto; min-height: 70px; padding: 14px 18px; align-items: flex-start; }
-      .header-stats { display: none; }
-      .layout { height: auto; grid-template-columns: 1fr; }
+      body { height: auto; min-height: 100dvh; overflow: auto; }
+      header { padding: 12px 16px; }
+      .layout { flex: none; grid-template-columns: minmax(0, 1fr); }
       aside { border-right: 0; border-bottom: 1px solid var(--line); }
-      main { height: 70vh; }
+      main { height: 70vh; min-height: 390px; padding: 16px; }
     }
     __WORKSPACE_STYLES__
   </style>
 </head>
 <body>
   <header>
-    <div class="brand">
-      <div class="brand-mark">3D</div>
-      <div>
-        <h1>Геологическая разведка</h1>
-        <p>Истинная модель · наблюдения · восстановление</p>
-      </div>
-    </div>
-    <div class="header-stats" id="headerStats"></div>
+    <h1>Геологическая разведка</h1>
   </header>
 
   __WORKSPACE_TABS__
   <div class="layout" id="truthPanel" role="tabpanel" aria-labelledby="tab-truth">
     <aside>
+      <div class="control-group">
+        <h2>Размеры карты</h2>
+        <div class="map-dimensions">
+          <span>Длина</span><strong id="mapLength"></strong>
+          <span>Ширина</span><strong id="mapWidth"></strong>
+          <span>Высота</span><strong id="mapHeight"></strong>
+        </div>
+        <div class="map-dimensions map-seed"><span>Seed</span><strong id="seedValue"></strong></div>
+      </div>
       <div class="control-group">
         <h2>Режим просмотра</h2>
         <select id="modeSelect">
@@ -211,7 +196,6 @@ HTML_TEMPLATE = r'''<!doctype html>
     <main>
       <div class="viewer-toolbar">
         <h2 id="viewTitle">Трёхмерная блочная модель</h2>
-        <span class="status-pill">seed <span id="seedValue"></span></span>
       </div>
       <div class="canvas-shell" id="canvasShell">
         <canvas id="mapCanvas"></canvas>
@@ -223,6 +207,7 @@ HTML_TEMPLATE = r'''<!doctype html>
   __WORKSPACE_PANELS__
   <script>
     const MAP_DATA = __MAP_DATA__;
+    const MAP_SEED_TEXT = __MAP_SEED_TEXT__;
     const OBSERVATION_DATA = __OBSERVATION_DATA__;
     const OBSERVATION_IMPORT_ROCKS = __OBSERVATION_IMPORT_ROCKS__;
     const OBSERVATION_IMPORT_XLSX = __OBSERVATION_IMPORT_XLSX__;
@@ -271,13 +256,10 @@ HTML_TEMPLATE = r'''<!doctype html>
       dragX: 0
     };
 
-    document.getElementById('seedValue').textContent = MAP_DATA.seed;
-    document.getElementById('headerStats').innerHTML = [
-      `${dims.width_m} × ${dims.height_m} м`,
-      `глубина ${dims.depth_m} м`,
-      `${MAP_DATA.statistics.cell_count} ячеек`,
-      `${MAP_DATA.statistics.mineralized_cell_count} минерализованных`
-    ].map(text => `<span>${text}</span>`).join('');
+    document.getElementById('seedValue').textContent = MAP_SEED_TEXT;
+    document.getElementById('mapLength').textContent = `${dims.height_m} м`;
+    document.getElementById('mapWidth').textContent = `${dims.width_m} м`;
+    document.getElementById('mapHeight').textContent = `${dims.depth_m} м`;
 
     function cellAt(x, y) {
       if (x < 0 || y < 0 || x >= dims.width_cells || y >= dims.height_cells) return null;
@@ -374,11 +356,8 @@ HTML_TEMPLATE = r'''<!doctype html>
 
     function clearCanvas() {
       const {width, height} = canvasSize();
-      const gradient = ctx.createLinearGradient(0, 0, 0, height);
-      gradient.addColorStop(0, '#fbfdff');
-      gradient.addColorStop(1, '#eef3f7');
       ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = gradient;
+      ctx.fillStyle = '#faf9f4';
       ctx.fillRect(0, 0, width, height);
     }
 
@@ -465,7 +444,7 @@ HTML_TEMPLATE = r'''<!doctype html>
             points,
             depth: points.reduce((sum, point) => sum + point.depth, 0) / points.length,
             fill: rgba(rock.color, 1, shade),
-            stroke: 'rgba(20,48,70,.11)'
+            stroke: 'rgba(39,49,39,.11)'
           });
           const stepX = projection.sin >= 0 ? 1 : -1, stepY = projection.cos >= 0 ? 1 : -1;
           for (const [otherX, otherY, a, b] of [
@@ -499,7 +478,7 @@ HTML_TEMPLATE = r'''<!doctype html>
             points,
             depth: points.reduce((sum, point) => sum + point.depth, 0) / points.length,
             fill: rgba(rock.color, 1, 0.84),
-            stroke: 'rgba(20,48,70,.13)'
+            stroke: 'rgba(39,49,39,.13)'
           });
         }
       }
@@ -521,7 +500,7 @@ HTML_TEMPLATE = r'''<!doctype html>
             points,
             depth: points.reduce((sum, point) => sum + point.depth, 0) / points.length,
             fill: rgba(rock.color, 1, 0.72),
-            stroke: 'rgba(20,48,70,.14)'
+            stroke: 'rgba(39,49,39,.14)'
           });
         }
       }
@@ -570,12 +549,6 @@ HTML_TEMPLATE = r'''<!doctype html>
         }
       }
 
-      ctx.fillStyle = 'rgba(16,42,67,.76)';
-      ctx.font = '600 12px system-ui, sans-serif';
-      ctx.fillText('Поверхность', 18, 25);
-      ctx.fillStyle = 'rgba(98,125,152,.9)';
-      ctx.font = '11px system-ui, sans-serif';
-      ctx.fillText('Цветные боковые грани показывают геологические интервалы', 18, 43);
       state.hitMap = null;
     }
 
@@ -605,7 +578,7 @@ HTML_TEMPLATE = r'''<!doctype html>
           const rock = rockById[interval.rock_id];
           const sx = geometry.left + cell.x_m * geometry.cellSize;
           const sy = geometry.top + cell.y_m * geometry.cellSize;
-          ctx.fillStyle = state.visibleRocks.has(rock.id) ? rock.color : '#e5eaf0';
+          ctx.fillStyle = state.visibleRocks.has(rock.id) ? rock.color : '#e5e3db';
           ctx.fillRect(sx, sy, sourceCellSize + .3, sourceCellSize + .3);
           const mineral = state.showDeposit ? mineralizationAt(cell, depthM) : null;
           if (mineral) {
@@ -652,7 +625,7 @@ HTML_TEMPLATE = r'''<!doctype html>
         ctx.fillStyle = color;
         ctx.fillRect(geometry.left + index * 24, legendY, 24, 7);
       }
-      ctx.fillStyle = '#243b53';
+      ctx.fillStyle = '#30382f';
       ctx.fillText(`Отметки от ${low} до ${high} м`, geometry.left + 105, legendY + 7);
       state.hitMap = {type: 'terrain', geometry};
     }
@@ -680,7 +653,7 @@ HTML_TEMPLATE = r'''<!doctype html>
         ctx.fillStyle = geophysicalColor(index / 9);
         ctx.fillRect(geometry.left + index * 10, legendY, 10, 7);
       }
-      ctx.fillStyle = '#243b53';
+      ctx.fillStyle = '#30382f';
       ctx.fillText(`${low} … ${high} ${unit}`, geometry.left + 110, legendY + 7);
       state.hitMap = {type: 'terrain', geometry};
     }
@@ -706,7 +679,7 @@ HTML_TEMPLATE = r'''<!doctype html>
           const intervalHeight = (
             interval.to_depth_m - interval.from_depth_m
           ) * geometry.cellSize;
-          ctx.fillStyle = state.visibleRocks.has(rock.id) ? rock.color : '#e5eaf0';
+          ctx.fillStyle = state.visibleRocks.has(rock.id) ? rock.color : '#e5e3db';
           ctx.fillRect(sx, sy, sourceWidth + .3, intervalHeight + .3);
         }
         if (state.showDeposit) {
@@ -742,7 +715,7 @@ HTML_TEMPLATE = r'''<!doctype html>
         ctx.strokeStyle = strong ? 'rgba(255,255,255,.62)' : 'rgba(255,255,255,.38)';
         ctx.lineWidth = strong ? 2.2 : 1.4;
         ctx.stroke();
-        ctx.strokeStyle = strong ? 'rgba(16,42,67,.62)' : 'rgba(16,42,67,.32)';
+        ctx.strokeStyle = strong ? 'rgba(37,54,46,.62)' : 'rgba(37,54,46,.32)';
         ctx.lineWidth = strong ? 1.15 : .65;
         ctx.stroke();
       }
@@ -754,13 +727,13 @@ HTML_TEMPLATE = r'''<!doctype html>
         gridLine(false, y, y % 50 === 0);
       }
 
-      ctx.strokeStyle = 'rgba(16,42,67,.72)';
+      ctx.strokeStyle = 'rgba(37,54,46,.72)';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(geometry.left, geometry.top, geometry.gridWidth, geometry.gridHeight);
-      ctx.fillStyle = '#102a43';
+      ctx.fillStyle = '#25362e';
       ctx.font = '600 13px system-ui, sans-serif';
       ctx.fillText(title, geometry.left, geometry.top - 15);
-      ctx.fillStyle = '#627d98';
+      ctx.fillStyle = '#62675e';
       ctx.font = '11px system-ui, sans-serif';
       ctx.fillText('0 м', geometry.left - 2, geometry.top + geometry.gridHeight + 22);
       const labelStep = geometry.cellSize * 50 >= 42 ? 50 : 100;
@@ -1001,6 +974,8 @@ def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[s
     legacy_survey = observations is not None and LEGACY_GEOPHYSICAL_TABLE in observations["tables"]
     if legacy_survey:
         observations = split_legacy_geophysical_bundle(observations)
+    if observations is not None:
+        observations = with_magnetic_log_schema(observations)
     public_observations = json.dumps(observations, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
     public_recognition = json.dumps(recognition, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
     if observation_config is None and observations is None:
@@ -1030,7 +1005,8 @@ def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[s
     data_replacements = {"__OBSERVATION_DATA__": public_observations, "__RECOGNITION_DATA__": public_recognition,
                          "__OBSERVATION_IMPORT_ROCKS__": embedded_rocks,
                          "__OBSERVATION_IMPORT_XLSX__": json.dumps(template_bytes),
-                         "__MAP_DATA__": embedded, "__PRELIMINARY_PLAN__": embedded_plan}
+                         "__MAP_DATA__": embedded, "__MAP_SEED_TEXT__": json.dumps(str(data.get("seed", 0))).replace("</", "<\\/"),
+                         "__PRELIMINARY_PLAN__": embedded_plan}
     html = re.sub("|".join(data_replacements), lambda match: data_replacements[match.group()], html)
     output_path.write_text(html, encoding="utf-8")
     return output_path

@@ -23,6 +23,7 @@ const outcrop=row('outcrop_observations',{...survey,observation_id:'O-X',observe
 const lithology=row('borehole_lithology',{hole_id:'BH-X',interval_id:'L-X',from_m:0,to_m:50,observed_rock_id:'granite',observed_rock_name:'Гранит',confidence:'high',observer:'geologist',logged_date:'2026-11-25'});
 const properties=row('downhole_properties',{hole_id:'BH-X',measurement_id:'P-X',from_m:0,to_m:5,density_g_cm3:2.7,porosity_percent:2,measurement_method:'core',qc_flag:'not_checked'});
 const downGamma=row('downhole_gamma',{hole_id:'BH-X',measurement_id:'DG-X',from_m:0,to_m:1,depth_m:.5,gamma_count_rate_cps:10,gamma_sigma_cps:.3,counting_time_s:60,measurement_method:'logger',logged_date:'2026-11-25'});
+const downMagnetic=row('downhole_magnetic',{hole_id:'BH-X',measurement_id:'DM-X',from_m:0,to_m:1,depth_m:.5,magnetic_susceptibility_si:-0.00002,magnetic_sigma_si:.00005,measurement_method:'logger',logged_date:'2026-11-25'});
 const structure=row('structural_observations',{observation_id:'F-X',hole_id:'BH-X',depth_m:4,feature_type:'fault',strike_deg:30,dip_deg:45,dip_direction_deg:120,confidence:'high',observation_method:'core'});
 const fault=row('fault_intersections',{observation_id:'F-X',hole_id:'BH-X',from_m:3,to_m:5,observation_method:'core',confidence:'high'});
 const trench=row('trenches',{trench_id:'TR-X',start_x_m:100,start_y_m:200,end_x_m:120,end_y_m:200,depth_m:2,width_m:1,surveyed_length_m:20,position_uncertainty_m:1,trench_status:'completed',survey_date:'2026-11-25'});
@@ -32,15 +33,17 @@ const surface=row('surface_geochemistry',{...metadata,sample_id:'SS-X',x_m:20,y_
 const qc=row('quality_control',{analyte:'Cu',unit:'% Cu',result_value:.5,detection_limit:.01,control_id:'QC-X',sample_id:'QCS-X',parent_sample_id:'S-X',sample_source:'borehole',hole_id:'BH-X',qc_type:'duplicate',acceptance_limit:20,acceptance_unit:'%',qc_flag:'pass'});
 const all={
   quality_control:[qc],fault_intersections:[fault],trench_samples:[trenchSample],borehole_assays:[assay,{...assay,analyte:'Au',unit:'g/t Au'}],
-  borehole_collars:[borehole],borehole_lithology:[lithology],downhole_properties:[properties],downhole_gamma:[downGamma],structural_observations:[structure],
+  borehole_collars:[borehole],borehole_lithology:[lithology],downhole_properties:[properties],downhole_gamma:[downGamma],downhole_magnetic:[downMagnetic],structural_observations:[structure],
   trenches:[trench],trench_intervals:[trenchLog],surface_geochemistry:[surface],terrain_observations:[terrain],outcrop_observations:[outcrop],magnetic_observations:[magnetic],gamma_observations:[gamma],
 };
 const bundle=fixture(), allowed=Object.keys(fields);
 const importRows=(target,tables,options={})=>engine.apply(target,{tables,textValues:false},{allowedTables:allowed,filename:'example.json',...options});
 const parsed=engine.parseText('all.json',JSON.stringify({campaign,tables:all}),null,bundle);
 const result=engine.apply(bundle,parsed,{allowedTables:allowed,filename:'all.json'});
-assert.equal(result.added,17);
+assert.equal(result.added,18);
 assert.equal(bundle.summary.hole_count,1);
+assert.equal(bundle.summary.magnetic_log_count,1);
+assert.equal(bundle.borehole_sources[0].summary.magnetic_log_count,1);
 assert.equal(bundle.summary.total_sample_count,3);
 assert.equal(bundle.summary.geophysical_observation_count,1);
 assert.equal(bundle.borehole_sources[0].hole_ids[0],'BH-X');
@@ -50,7 +53,7 @@ assert.equal(bundle.import_log.length,1);
 const before=JSON.stringify(bundle);
 const dup=importRows(bundle,all,{filename:'renamed.json'});
 assert.equal(dup.added,0);
-assert.equal(dup.duplicates,17);
+assert.equal(dup.duplicates,18);
 assert.equal(JSON.stringify(bundle),before);
 function reject(tables,match,options={}){
   const original=JSON.stringify(bundle);
@@ -74,6 +77,12 @@ reject({fault_intersections:[{...fault,observation_id:'UNKNOWN'}]},/ссылат
 reject({quality_control:[{...qc,control_id:'NEW',sample_id:'NEW',parent_sample_id:'UNKNOWN'}]},/Исходная проба/);
 reject({borehole_collars:[{...borehole,hole_id:'NEW',dip_deg:-90}]},/типу бурения/,{sourceKind:'inclined_boreholes'});
 reject({magnetic_observations:[{...magnetic,observation_id:'NEW'}]},/не относится/,{allowedTables:['terrain_observations']});
+reject({downhole_magnetic:[{...downMagnetic,magnetic_susceptibility_si:.005}]},/Конфликт дубликата/);
+reject({downhole_magnetic:[{...downMagnetic,measurement_id:'NEW',from_m:1,to_m:2,depth_m:1.1}]},/середина интервала/);
+reject({downhole_magnetic:[{...downMagnetic,measurement_id:'NEW',magnetic_sigma_si:-1}]},/отрицательным/);
+reject({downhole_magnetic:[{...downMagnetic,measurement_id:'NEW'}]},/Перекрытие/);
+reject({downhole_magnetic:[{...downMagnetic,measurement_id:'NEW',hole_id:'UNKNOWN'}]},/Неизвестная скважина/);
+reject({downhole_magnetic:[{...downMagnetic,measurement_id:'NEW',from_m:49,to_m:51,depth_m:50}]},/интервал/);
 // CSV quoting, different order, decimal semicolon, BOM and duplicate within the file.
 const csvField=fields.terrain_observations;
 const csvRow={...terrain,observation_id:'T-CSV',observation_method:'метод, с "кавычками"\nи переносом'};
@@ -88,4 +97,9 @@ assert.throws(()=>engine.parseText('bad.csv','"broken','terrain_observations',bu
 const layer=engine.geojsonLayer(bundle,'magnetic_observations');
 assert.equal(engine.apply(bundle,engine.parseText('magnetic.geojson',JSON.stringify(layer),'magnetic_observations',bundle),{allowedTables:['magnetic_observations']}).duplicates,1);
 assert.throws(()=>engine.parseText('wrong.geojson',JSON.stringify(layer),'gamma_observations',bundle),/не соответствует/);
-console.log('Import engine: all 16 schemas, CSV/GeoJSON/JSON, duplicate/conflict, references, atomicity and metadata OK');
+const magneticCsvFields=fields.downhole_magnetic;
+const magneticCsvRow={...downMagnetic,measurement_id:'DM-CSV',from_m:1,to_m:2,depth_m:1.5,magnetic_susceptibility_si:.002};
+const magneticCsv=magneticCsvFields.join(',')+'\n'+magneticCsvFields.map(k=>quote(magneticCsvRow[k])).join(',')+'\n';
+assert.equal(engine.apply(bundle,engine.parseText('magnetic_log.csv',magneticCsv,'downhole_magnetic',bundle),{allowedTables:['downhole_magnetic']}).added,1);
+assert.equal(bundle.summary.magnetic_log_count,2);
+console.log('Import engine: all 17 schemas, CSV/GeoJSON/JSON, duplicate/conflict, references, atomicity and metadata OK');

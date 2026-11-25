@@ -16,6 +16,7 @@ if str(SRC_ROOT) not in sys.path:
 from geo_map.generator import (
     _fault_signed_distance_m,
     _rotated_horizontal_extents,
+    _select_deposit_types,
     generate_map,
     load_config,
     save_map,
@@ -121,6 +122,21 @@ class GeneratorTests(unittest.TestCase):
         self.assertTrue(
             all(deposit["origin"] == "generated" for deposit in self.generated["deposits"])
         )
+
+    def test_default_map_has_more_and_larger_deposits(self) -> None:
+        self.assertEqual(self.config["deposit_generation"]["count"], [5, 8])
+        self.assertGreaterEqual(len(self.generated["deposits"]), 5)
+        self.assertGreaterEqual(self.generated["statistics"]["mineralized_cell_count"], 500)
+        copper = next(m for m in self.config["minerals"] if m["id"] == "copper")
+        self.assertGreaterEqual(copper["radius_x_m"][0], 95)
+        self.assertGreaterEqual(copper["radius_y_m"][0], 80)
+
+    def test_selection_reuses_eligible_types_only_when_needed(self) -> None:
+        types = [{"id": "a", "weight": 1}, {"id": "b", "weight": 1}]
+        selected = _select_deposit_types(123, types, 5)
+        self.assertEqual(len(selected), 5)
+        self.assertEqual({m["id"] for m in selected[:2]}, {"a", "b"})
+        self.assertTrue(all(m in types for m in selected))
 
     def test_generated_deposits_have_distinct_minerals(self) -> None:
         mineral_ids = [deposit["mineral_id"] for deposit in self.generated["deposits"]]

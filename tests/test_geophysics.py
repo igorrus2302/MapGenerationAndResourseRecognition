@@ -14,6 +14,7 @@ from geo_map.geophysical_observations import GEOPHYSICAL_DIRECTORIES, GEOPHYSICA
 from geo_map.geophysics import add_geophysical_fields
 from geo_map.observations import generate_observations, save_observations
 from geo_map.recognition import recognize_deposits
+from geo_map.recognition_geophysics import DownholeMagneticEvidence
 from geo_map.recognition_spatial import survey_radius
 
 
@@ -86,6 +87,82 @@ class GeophysicsTests(unittest.TestCase):
         bundle["tables"]["downhole_gamma"] = []
         target = next(item for item in recognize_deposits(bundle, self.minerals)["targets"] if item["mineral_id"] == "uranium")
         self.assertNotIn("downhole_gamma_anomaly", target["supporting_signals"])
+
+    def test_magnetic_logging_supports_ore_along_vertical_and_inclined_trajectories(self):
+        self.config["downhole_magnetic"] = {"enabled": True, "interval_m": 1}
+        truth = self.truth(15)
+        rock = next(row for row in self.rocks["rocks"] if row["id"] == "ferruginous_quartzite")
+        host = rock["geophysical_source"]["magnetic_susceptibility_si"]
+        iron = next(row for row in self.minerals["minerals"] if row["id"] == "iron")
+        ore = iron["geophysical_source"]["magnetic_susceptibility_si"]
+        for dip in (-90, -80):
+            with self.subTest(dip=dip):
+                self.config["drilling"]["holes"][0].update(azimuth_deg=90, dip_deg=dip)
+                bundle = generate_observations(truth, self.config, seed=1, mineral_catalog=self.minerals)
+                logs = [row for row in bundle["tables"]["downhole_magnetic"] if row["hole_id"] == "BH-001"]
+                self.assertEqual(len(logs), 22)
+                self.assertTrue(all(row["magnetic_sigma_si"] == 0 for row in logs))
+                self.assertAlmostEqual(logs[0]["magnetic_susceptibility_si"], host)
+                self.assertAlmostEqual(logs[12]["magnetic_susceptibility_si"], host+ore)
+                if dip != -90:
+                    boundary = 10 / math.sin(math.radians(abs(dip)))
+                    self.assertAlmostEqual(logs[10]["magnetic_susceptibility_si"], host+ore*(11-boundary), places=8)
+                result = recognize_deposits(bundle, self.minerals, rock_catalog=self.rocks)
+                target = next(row for row in result["targets"] if row["mineral_id"] == "iron")
+                self.assertIn("downhole_magnetic_anomaly", target["supporting_signals"])
+                evidence = target["downhole_magnetic_evidence"]
+                self.assertIn(logs[12]["measurement_id"], evidence["measurement_ids"])
+                self.assertEqual(evidence["background_method"], "lithology_reference")
+                self.assertAlmostEqual(evidence["background_si"], host)
+                self.assertGreater(result["summary"]["downhole_magnetic_anomaly_count"], 0)
+                self.assertGreater(result["summary"]["targets_supported_by_downhole_magnetic"], 0)
+                self.assertTrue(any("downhole_magnetic_anomaly" in zone["signals"] for zone in result["reconstructed_map"]["mineral_zones"]))
+                no_logs = deepcopy(bundle)
+                no_logs["tables"]["downhole_magnetic"] = []
+                target = next(row for row in recognize_deposits(no_logs, self.minerals)["targets"] if row["mineral_id"] == "iron")
+                self.assertNotIn("downhole_magnetic_anomaly", target["supporting_signals"])
+                no_assays = deepcopy(bundle)
+                no_assays["tables"]["borehole_assays"] = []
+                result = recognize_deposits(no_assays, self.minerals, rock_catalog=self.rocks)
+                self.assertFalse(any(row.get("mineral_id") == "iron" for row in result["targets"]))
+                self.assertGreater(result["summary"]["downhole_magnetic_anomaly_count"], 0)
+
+    def test_magnetic_logging_has_independent_noise_and_coverage(self):
+        truth = self.truth()
+        self.config["ideal"] = False
+        self.config["downhole_magnetic"] = {"enabled": True, "interval_m": 2.5, "sigma_si": 0.00005}
+        self.config["noise"] = {"missing_sample_probability": 1}
+        first = generate_observations(truth, self.config, seed=7, mineral_catalog=self.minerals)
+        second = generate_observations(truth, self.config, seed=7, mineral_catalog=self.minerals)
+        rows = first["tables"]["downhole_magnetic"]
+        self.assertEqual(rows, second["tables"]["downhole_magnetic"])
+        self.assertEqual(first["summary"]["sample_count"], 0)
+        self.assertTrue(all(row["magnetic_sigma_si"] == 0.00005 for row in rows))
+        for hole in first["tables"]["borehole_collars"]:
+            own = [row for row in rows if row["hole_id"] == hole["hole_id"]]
+            self.assertEqual(own[0]["from_m"], 0)
+            self.assertEqual(own[-1]["to_m"], hole["total_depth_m"])
+            self.assertEqual(len(own), math.ceil(hole["total_depth_m"]/2.5))
+        self.config["downhole_magnetic"]["sigma_si"] = -1
+        with self.assertRaises(ValueError):
+            generate_observations(truth, self.config, seed=7)
+
+    def test_magnetic_background_does_not_confuse_rock_contact_with_ore(self):
+        catalog = {row["id"]: row["geophysical_source"]["magnetic_susceptibility_si"]
+                   for row in self.rocks["rocks"]}
+        rock_ids = ["sandstone"]*10 + ["basalt"]*2
+        rows = [{"hole_id": "BH", "measurement_id": f"M{i}", "from_m": i, "to_m": i+1,
+                 "magnetic_susceptibility_si": catalog[rock], "magnetic_sigma_si": 0.00005}
+                for i, rock in enumerate(rock_ids)]
+        logs = [{"hole_id": "BH", "from_m": 0, "to_m": 10, "observed_rock_id": "sandstone"},
+                {"hole_id": "BH", "from_m": 10, "to_m": 12, "observed_rock_id": "basalt"}]
+        observations = {"tables": {"downhole_magnetic": rows, "borehole_lithology": logs}}
+        with_catalog = DownholeMagneticEvidence(observations, self.minerals, self.rocks)
+        self.assertFalse(with_catalog.anomalies)
+        self.assertEqual(with_catalog.backgrounds[0]["background_method"], "lithology_reference")
+        without_catalog = DownholeMagneticEvidence(observations, self.minerals)
+        self.assertEqual(without_catalog.backgrounds[0]["background_method"], "borehole_median")
+        self.assertEqual(len(without_catalog.anomalies["BH"]), 2)
 
     def test_recomputing_saved_fields_uses_current_rock_calibration(self):
         truth = self.truth(5)

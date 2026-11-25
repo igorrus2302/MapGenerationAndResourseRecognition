@@ -40,6 +40,11 @@
     "sigma_cps": 0.2,
     "counting_time_s": 60
   },
+  "downhole_magnetic": {
+    "enabled": true,
+    "interval_m": 1,
+    "sigma_si": 0.00005
+  },
   "surface_geochemistry": {
     "enabled": true,
     "layout": "grid",

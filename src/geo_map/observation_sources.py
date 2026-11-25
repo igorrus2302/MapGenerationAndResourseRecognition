@@ -8,7 +8,7 @@ from typing import Any
 
 BOREHOLE_SOURCE_TABLES = (
     "borehole_collars", "borehole_lithology", "borehole_assays", "downhole_properties",
-    "structural_observations", "fault_intersections", "downhole_gamma",
+    "structural_observations", "fault_intersections", "downhole_gamma", "downhole_magnetic",
 )
 BOREHOLE_SOURCE_KINDS = {
     "vertical_boreholes": "Вертикальное бурение",
@@ -41,6 +41,7 @@ def describe_borehole_sources(bundle: dict[str, Any]) -> list[dict[str, Any]]:
                 "lithology_count": len(tables["borehole_lithology"]),
                 "property_count": len(tables["downhole_properties"]),
                 "gamma_log_count": len(tables.get("downhole_gamma", ())),
+                "magnetic_log_count": len(tables.get("downhole_magnetic", ())),
                 "contact_count": sum(row["feature_type"] == "contact" for row in tables["structural_observations"]),
                 "fault_observation_count": len(tables["fault_intersections"]),
             },

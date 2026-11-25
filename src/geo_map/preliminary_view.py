@@ -121,13 +121,13 @@ PRELIMINARY_SCRIPT = r'''
         const points = selectedRow ? [...rows.filter(row => row !== selectedRow), selectedRow] : rows;
         const attributes = (row, x, y, size, border = 'none') => {
           const selected = row.observation_id === selectedId;
-          return `class="hole-dot" role="button" tabindex="0" aria-label="${escape(row.observation_id)}" aria-pressed="${selected}" data-observation="${escape(row.observation_id)}" cx="${x}" cy="${y}" r="${selected ? Math.max(6, size + 2) : size}" stroke="${selected ? '#e95e2a' : border}" stroke-width="${selected ? 3 : 1}"`;
+          return `class="hole-dot" role="button" tabindex="0" aria-label="${escape(row.observation_id)}" aria-pressed="${selected}" data-observation="${escape(row.observation_id)}" cx="${x}" cy="${y}" r="${selected ? Math.max(6, size + 2) : size}" stroke="${selected ? '#a35a35' : border}" stroke-width="${selected ? 3 : 1}"`;
         };
         if (method === 'outcrops') {
           element('outcropMap').innerHTML = markup + points.map(row => {
             const {x, y} = point(row.x_m, row.y_m);
-            const color = rockById[row.observed_rock_id]?.color || '#1677a8';
-            return `<circle ${attributes(row, x, y, 4.5, '#243b53')} fill="${escape(color)}"><title>${escape(row.observation_id)} · ${escape(row.observed_rock_name)} · ${number(row.surface_elevation_m)} м</title></circle>`;
+            const color = rockById[row.observed_rock_id]?.color || '#355d48';
+            return `<circle ${attributes(row, x, y, 4.5, '#30382f')} fill="${escape(color)}"><title>${escape(row.observation_id)} · ${escape(row.observed_rock_name)} · ${number(row.surface_elevation_m)} м</title></circle>`;
           }).join('');
           element('outcropCaption').textContent = `${number(rows.length)} обнажений на ${number(settings.points?.length ?? settings.point_count ?? rows.length)} обследованных точках. Цвет соответствует наблюдённой породе.`;
         } else if (method === 'terrain_survey') {

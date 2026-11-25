@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.8",
+  "schema_version": "1.9",
   "data_kind": "borehole_source_manifest",
   "campaign": {
     "campaign_id": "EXAMPLE-CAMPAIGN",
@@ -25,7 +25,8 @@
         "downhole_properties",
         "structural_observations",
         "fault_intersections",
-        "downhole_gamma"
+        "downhole_gamma",
+        "downhole_magnetic"
       ],
       "summary": {
         "hole_count": 1,
@@ -36,7 +37,8 @@
         "property_count": 1,
         "contact_count": 1,
         "fault_observation_count": 0,
-        "gamma_log_count": 3
+        "gamma_log_count": 3,
+        "magnetic_log_count": 3
       }
     },
     {
@@ -54,7 +56,8 @@
         "downhole_properties",
         "structural_observations",
         "fault_intersections",
-        "downhole_gamma"
+        "downhole_gamma",
+        "downhole_magnetic"
       ],
       "summary": {
         "hole_count": 1,
@@ -65,7 +68,8 @@
         "property_count": 1,
         "contact_count": 1,
         "fault_observation_count": 0,
-        "gamma_log_count": 3
+        "gamma_log_count": 3,
+        "magnetic_log_count": 3
       }
     }
   ]

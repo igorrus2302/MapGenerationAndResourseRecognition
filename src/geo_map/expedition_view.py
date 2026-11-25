@@ -6,85 +6,99 @@ from .observation_import_view import IMPORT_ENGINE, IMPORT_STYLES, IMPORT_UI, im
 from .reconstruction_view import RECONSTRUCTION_STYLES, RECONSTRUCTION_HTML, MINERALS_PANEL, RECONSTRUCTION_SCRIPT
 
 WORKSPACE_STYLES = r'''
-    .workspace-tabs { height: 62px; display: flex; align-items: stretch; gap: 5px; padding: 8px 22px 0; background: white; border-bottom: 1px solid var(--line); }
-    .workspace-tab { width: auto; border: 0; border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; display: flex; align-items: center; gap: 10px; padding: 10px 20px; color: var(--muted); background: transparent; }
-    .workspace-tab[aria-selected="true"] { color: var(--blue); border-bottom-color: var(--blue); background: #eef7fb; }
-    .tab-number { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; background: #edf1f6; font-size: 11px; }
-    .workspace-tab[aria-selected="true"] .tab-number { background: #d1eaf4; }
-    .layout { height: calc(100dvh - 132px); }
-    .workspace-page { height: calc(100dvh - 132px); overflow: auto; padding: 26px; }
-    .expedition-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
-    .expedition-heading h2 { margin: 0 0 4px; font-size: 23px; color: var(--navy); }
-    .expedition-heading p { margin: 0; color: var(--muted); }
-    .primary-button { width: auto; padding: 10px 16px; color: white; background: var(--blue); border-color: var(--blue); white-space: nowrap; }
-    .primary-button:hover { color: white; background: #12658f; }
-    .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
-    .metric-card { background: white; border: 1px solid var(--line); padding: 14px 18px; border-radius: 12px; }
-    .metric-card strong { display: block; font-size: 25px; color: var(--navy); }
-    .metric-card span { color: var(--muted); font-size: 12px; }
-    .expedition-grid { display: grid; grid-template-columns: minmax(280px, .9fr) minmax(400px, 1.5fr); gap: 18px; align-items: stretch; margin-bottom: 18px; }
-    .panel-card { background: white; border: 1px solid var(--line); border-radius: 13px; padding: 18px; min-width: 0; }
-    .panel-card h3 { margin: 0 0 4px; font-size: 15px; color: var(--navy); }
+    .workspace-tabs {
+      flex: 0 0 auto; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+      background: var(--ink); padding: 0 26px; gap: 0;
+    }
+    .workspace-tab {
+      display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px;
+      width: 100%; min-height: 62px; padding: 10px 14px; border: 0; border-radius: 0;
+      border-top: 3px solid transparent; border-right: 1px solid #ffffff24;
+      color: #e8e8dd; background: transparent; text-align: left; line-height: 1.3; font-size: 13px; overflow-wrap: anywhere;
+    }
+    .workspace-tab:first-child { border-left: 1px solid #ffffff24; }
+    .workspace-tab:hover:not(:disabled) { color: #fff; background: #3a4d40; }
+    .workspace-tab[aria-selected="true"] { color: var(--ink); background: var(--paper); border-top-color: var(--highlight); }
+    .workspace-tab[aria-selected="true"]:hover { color: var(--ink); background: var(--paper); }
+    .workspace-tab:focus-visible { outline-offset: -4px; }
+    .tab-number { font: 11px/1 var(--mono); color: #c3c9b8; letter-spacing: .04em; }
+    .workspace-tab[aria-selected="true"] .tab-number { color: var(--highlight); }
+    .workspace-page { flex: 1 1 0; min-height: 0; min-width: 0; overflow: auto; padding: 26px; }
+    .expedition-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding-bottom: 16px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+    .expedition-heading > div { flex: 1 1 280px; min-width: 0; }
+    .expedition-heading h2 { margin: 0 0 6px; font: 500 28px/1.2 var(--heading); color: var(--ink); }
+    .expedition-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+    .primary-button { width: auto; padding: 10px 16px; color: white; background: var(--accent); border-color: var(--accent); white-space: normal; }
+    .primary-button:hover:not(:disabled) { color: white; background: var(--accent-hover); border-color: var(--accent-hover); }
+    .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--line); background: var(--line); margin-bottom: 22px; }
+    .metric-card { min-width: 0; background: var(--surface); padding: 14px 18px; }
+    .metric-card strong { display: block; margin-bottom: 4px; font-size: clamp(20px, 2vw, 28px); line-height: 1.2; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .metric-card span { display: block; color: var(--muted); font-size: 12px; }
+    .expedition-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: stretch; margin-bottom: 18px; }
+    .panel-card { background: var(--surface); border: 1px solid var(--line); padding: 18px; min-width: 0; }
+    .panel-card h3 { margin: 0 0 6px; font-size: 16px; font-weight: 650; color: var(--ink); }
     .muted { color: var(--muted); font-size: 12px; }
-    .survey-map { width: 100%; display: block; height: 275px; }
+    .survey-map { width: 100%; height: auto; max-height: 460px; display: block; }
+    .survey-map, .hole-profile, .downhole-log-profile, .hole-trajectory, .method-map, .method-profile { font-variant-numeric: tabular-nums; }
     .hole-dot { cursor: pointer; }
-    .hole-dot:focus { outline: none; stroke: var(--orange); stroke-width: 3; }
-    .hole-dot:hover { stroke: var(--orange); stroke-width: 3; }
-    .profile-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
-    .profile-heading select { width: auto; max-width: 180px; }
+    .hole-dot:focus, .hole-dot:hover { outline: none; stroke: var(--highlight); stroke-width: 3; }
+    .profile-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; }
+    .profile-heading > div { min-width: 0; }
+    .profile-heading select { width: auto; max-width: min(100%, 260px); }
     .selection-controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin: 12px 0; }
     .selection-controls label { flex: 1 1 160px; min-width: 0; margin: 0; }
     .selection-controls select { display: block; width: 100%; margin-top: 5px; }
-    .selection-detail { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 10px 0 0; }
-    .selection-detail strong { color: var(--navy); }
-    .hole-profile { height: 280px; width: 100%; display: block; }
-    .gamma-profile { height: 320px; width: 100%; display: block; }
-    .gamma-profile-panel { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); }
-    .hole-trajectory { height: 190px; width: 100%; display: block; margin-top: 16px; }
-    .profile-key { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 8px; }
+    .selection-detail { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 10px 0 0; overflow-wrap: anywhere; }
+    .selection-detail strong { color: var(--ink); }
+    .hole-profile { width: 100%; height: auto; max-height: 460px; display: block; }
+    .downhole-log-profile { width: 100%; height: auto; max-height: 460px; display: block; }
+    .downhole-log-panel { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .hole-trajectory { width: 100%; height: auto; max-height: 320px; display: block; margin-top: 16px; }
+    .profile-key { display: flex; gap: 8px 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 8px; }
     .profile-key span { display: inline-flex; align-items: center; gap: 5px; }
-    .profile-key i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
-    .data-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .profile-key i { width: 10px; height: 10px; border-radius: 1px; display: inline-block; flex: 0 0 auto; }
+    .data-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .data-heading > div { min-width: 0; }
     .data-heading button { width: auto; }
-    .data-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
-    .data-tab { width: auto; min-height: 34px; font-size: 12px; }
-    .data-tab[aria-pressed="true"] { color: var(--blue); background: #eaf5fa; border-color: #a5ccdf; }
-    .data-filters { display: flex; gap: 14px; align-items: end; flex-wrap: wrap; margin-bottom: 12px; }
-    .data-filters label { margin: 0; min-width: 155px; }
+    .data-tabs { display: flex; gap: 5px; flex-wrap: wrap; margin: 12px 0; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+    .data-tab { width: auto; min-height: 34px; font-size: 12px; background: transparent; }
+    .data-tab[aria-pressed="true"] { color: var(--ink); background: var(--accent-tint); border-color: var(--accent); }
+    .data-filters { display: flex; gap: 10px 14px; align-items: end; flex-wrap: wrap; margin-bottom: 12px; }
+    .data-filters label { flex: 1 1 155px; margin: 0; min-width: 0; max-width: 280px; }
     .data-filters select { display: block; margin-top: 5px; font-size: 12px; }
-    .table-scroll { overflow: auto; max-height: 380px; border: 1px solid var(--line); border-radius: 8px; }
-    .observation-table { border-collapse: collapse; width: 100%; font-size: 12px; white-space: nowrap; }
-    .observation-table th { background: #f0f5f9; color: #486581; font-weight: 600; position: sticky; top: 0; z-index: 1; }
-    .observation-table th, .observation-table td { padding: 9px 12px; text-align: left; border-bottom: 1px solid #e8edf2; }
-    .observation-table tbody tr:hover { background: #f4fafc; }
-    .table-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+    .table-scroll { overflow: auto; max-height: 380px; border: 1px solid var(--line); }
+    .observation-table { border-collapse: collapse; width: 100%; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .observation-table th { background: var(--surface-muted); color: var(--ink); font-weight: 650; position: sticky; top: 0; z-index: 1; }
+    .observation-table th, .observation-table td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); }
+    .observation-table tbody tr:nth-child(even) { background: #f6f4ed; }
+    .observation-table tbody tr:hover { background: var(--accent-tint); }
+    .table-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; font-size: 12px; color: var(--muted); }
     .page-buttons { display: flex; gap: 6px; }
     .page-buttons button { width: auto; min-height: 32px; font-size: 12px; }
-    button:disabled { opacity: .4; cursor: default; }
-    .method-notes { margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.65; }
-    .method-notes summary { cursor: pointer; color: var(--navy); font-weight: 600; }
-    .method-notes ul { padding-left: 20px; margin-bottom: 0; }
-    .empty-card { width: min(540px, 100%); padding: 36px; background: white; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 12px 40px #102a4308; }
-    .empty-card h2 { font-size: 24px; color: var(--navy); margin: 18px 0 10px; }
-    .empty-card p { color: var(--muted); line-height: 1.7; }
+    button:disabled { opacity: .46; cursor: default; }
+    .empty-card { width: min(590px, 100%); padding: 28px 30px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--highlight); }
+    .empty-card h2 { font: 500 28px/1.2 var(--heading); color: var(--ink); margin: 0 0 12px; }
+    .empty-card p { color: var(--muted); line-height: 1.7; margin: 0 0 14px; }
+    .empty-card-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 18px; }
+    .empty-card-actions button { width: 100%; min-height: 44px; padding: 10px 16px; white-space: normal; overflow-wrap: anywhere; text-align: center; }
     @media (max-width: 1050px) {
-      .workspace-tab { padding-inline: 12px; }
-      .tab-number { display: none; }
-    }
-    @media (max-width: 1000px) {
-      .expedition-grid { grid-template-columns: 1fr; }
+      .workspace-tabs { padding-inline: 14px; }
+      .workspace-tab { padding-inline: 10px; }
     }
     @media (max-width: 860px) {
-      .layout { height: auto; }
-      .workspace-tabs { padding-left: 6px; padding-right: 6px; gap: 0; height: auto; min-height: 56px; }
-      .workspace-tab { font-size: 11px; padding: 9px 8px; flex: 1; justify-content: center; gap: 5px; }
-      .workspace-page { height: auto; min-height: calc(100dvh - 140px); padding: 16px; overflow: visible; }
+      .workspace-tabs { padding: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .workspace-tab { font-size: 12px; min-height: 59px; }
+      .workspace-page { flex: none; min-height: 60vh; padding: 16px; overflow: visible; }
       .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .expedition-heading { align-items: flex-start; flex-direction: column; }
-      .table-footer { align-items: flex-start; flex-direction: column; }
+      .expedition-heading { align-items: flex-start; }
+      .expedition-heading h2 { font-size: 24px; }
+      .panel-card { padding: 14px; }
     }
-    @media (max-width: 640px) {
-      .workspace-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    @media (max-width: 520px) {
+      .workspace-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .empty-card { padding: 22px 18px; }
+      .empty-card h2 { font-size: 24px; }
+      .data-filters label { max-width: 100%; }
     }
 '''
 
@@ -95,7 +109,6 @@ WORKSPACE_TABS = r'''
     <button class="workspace-tab" id="tab-expedition" role="tab" aria-controls="expeditionPanel" aria-selected="false" tabindex="-1" data-workspace="expedition"><span class="tab-number">03</span>Разведочная экспедиция</button>
     <button class="workspace-tab" id="tab-recognized" role="tab" aria-controls="recognizedPanel" aria-selected="false" tabindex="-1" data-workspace="recognized"><span class="tab-number">04</span>Распознанная карта</button>
     <button class="workspace-tab" id="tab-minerals" role="tab" aria-controls="mineralsPanel" aria-selected="false" tabindex="-1" data-workspace="minerals"><span class="tab-number">05</span>Найденные ископаемые</button>
-    <button class="workspace-tab" id="tab-similarity" role="tab" aria-controls="similarityPanel" aria-selected="false" tabindex="-1" data-workspace="similarity"><span class="tab-number">06</span>Оценка сходства</button>
   </nav>
 '''
 
@@ -104,8 +117,10 @@ WORKSPACE_PANELS = r'''
     <div id="preliminaryEmpty" class="empty-card">
       <h2>Предварительные наблюдения</h2>
       <p id="preliminaryStatus" aria-live="polite">Соберите данные о магнитном поле, гамма-фоне, рельефе и обнажениях на текущей карте.</p>
-      <button id="collectPreliminary" type="button" class="primary-button">Собрать наблюдения</button>
-      <button id="openManualPreliminary" type="button">Открыть разделы для ручной загрузки</button>
+      <div class="empty-card-actions">
+        <button id="collectPreliminary" type="button" class="primary-button">Собрать наблюдения</button>
+        <button id="openManualPreliminary" type="button">Открыть разделы для ручной загрузки</button>
+      </div>
     </div>
     <div id="preliminaryContent" class="hidden">
       <div class="expedition-heading">
@@ -149,10 +164,15 @@ WORKSPACE_PANELS = r'''
           </div>
           <svg id="holeProfile" class="hole-profile" viewBox="0 0 700 300" role="img" aria-label="Литологический журнал и анализы выбранной скважины"></svg>
           <div class="profile-key" id="profileKey"></div>
-          <div id="gammaProfilePanel" class="gamma-profile-panel hidden">
+          <div id="gammaProfilePanel" class="downhole-log-panel hidden">
             <h3>Гамма-каротаж</h3>
             <div class="muted" id="gammaProfileCaption"></div>
-            <svg id="gammaProfile" class="gamma-profile" viewBox="0 0 700 300" role="img" aria-label="Гамма-сигнал вдоль ствола"></svg>
+            <svg id="gammaProfile" class="downhole-log-profile" viewBox="0 0 700 300" role="img" aria-label="Гамма-сигнал вдоль ствола"></svg>
+          </div>
+          <div id="magneticProfilePanel" class="downhole-log-panel hidden">
+            <h3>Магнитный каротаж</h3>
+            <div class="muted" id="magneticProfileCaption"></div>
+            <svg id="magneticProfile" class="downhole-log-profile" viewBox="0 0 700 300" role="img" aria-label="Магнитная восприимчивость вдоль ствола"></svg>
           </div>
           <svg id="holeTrajectory" class="hole-trajectory" viewBox="0 0 700 200" role="img" aria-label="Траектория выбранной скважины в вертикальной плоскости"></svg>
           <div class="muted" id="holeTrajectoryCaption"></div>
@@ -175,49 +195,21 @@ WORKSPACE_PANELS = r'''
         <div class="table-scroll"><table class="observation-table"><thead id="observationTableHead"></thead><tbody id="observationTableBody"></tbody></table></div>
         <div class="table-footer"><span id="observationPageInfo" aria-live="polite"></span><div class="page-buttons"><button id="observationPrevious">← Назад</button><button id="observationNext">Далее →</button></div></div>
       </div>
-      <details class="method-notes"><summary>План экспедиции и допущения модели</summary><div id="expeditionPlan"></div><ul id="expeditionNotes"></ul></details>
     </div>
   </section>
   <section id="recognizedPanel" class="workspace-page hidden" role="tabpanel" aria-labelledby="tab-recognized">
     <div class="empty-card" id="recognitionEmpty"><h2>Поиск по наблюдениям</h2><p>Результаты поиска ещё не загружены.</p></div>
     <div id="recognitionContent" class="hidden">
       __RECONSTRUCTION_HTML__
-      <div class="expedition-heading">
-        <div><h2>Результаты поиска</h2><p id="recognitionSummary"></p></div>
-        <button id="downloadRecognition" class="primary-button">Скачать результаты · JSON</button>
-      </div>
-      <div class="expedition-grid">
-        <div class="panel-card">
-          <div class="profile-heading"><h3>Карта наблюдений и целей поиска</h3><select id="recognitionAnalyte" aria-label="Компонент на карте поиска"><option value="">Все компоненты</option></select></div>
-          <svg id="recognitionMap" class="survey-map" viewBox="0 0 520 300" role="img" aria-label="План участка и положения выделенных целей"></svg>
-          <div class="muted">Синие линии — бурение и траншеи, серые точки — почвенные пробы, оранжевые метки — выделенные интервалы, зелёные — почвенные аномалии, фиолетовые — геофизические аномалии.</div>
-        </div>
-        <div class="panel-card">
-          <h3>Пробы и признаки</h3>
-          <div class="table-scroll"><table class="observation-table"><thead><tr><th scope="col">Источник</th><th scope="col">Глубина, м</th><th scope="col">Пик / порог</th><th scope="col">Поддержка</th></tr></thead><tbody id="recognitionTargets"></tbody></table></div>
-        </div>
-      </div>
     </div>
   </section>
   __MINERALS_PANEL__
-  <section id="similarityPanel" class="workspace-page hidden" role="tabpanel" aria-labelledby="tab-similarity" tabindex="0">
-    <div class="empty-card"><h2>Сравнение с истинной картой</h2><p>Оценка сходства пока недоступна.</p></div>
-  </section>
 '''
 
 WORKSPACE_SCRIPT = r'''
     (() => {
       const tabs = [...document.querySelectorAll('.workspace-tab')];
-      const panels = {truth: 'truthPanel', preliminary: 'preliminaryPanel', expedition: 'expeditionPanel', recognized: 'recognizedPanel', minerals: 'mineralsPanel', similarity: 'similarityPanel'};
-      const summary = OBSERVATION_DATA?.summary;
-      const stats = {
-        truth: document.getElementById('headerStats').innerHTML,
-        preliminary: '<span>Съёмка до бурения</span>',
-        expedition: summary ? `<span>${summary.hole_count} скважин</span><span>${summary.total_sample_count ?? summary.sample_count} полевых проб</span>` : '<span>Полевые наблюдения</span>',
-        recognized: '<span>Восстановленная модель</span>',
-        minerals: '<span>Рудные зоны и пробы</span>',
-        similarity: '<span>Сравнение карт</span>'
-      };
+      const panels = {truth: 'truthPanel', preliminary: 'preliminaryPanel', expedition: 'expeditionPanel', recognized: 'recognizedPanel', minerals: 'mineralsPanel'};
       function activate(name) {
         if (!Object.hasOwn(panels, name)) name = 'truth';
         for (const [key, id] of Object.entries(panels)) document.getElementById(id).classList.toggle('hidden', key !== name);
@@ -227,7 +219,6 @@ WORKSPACE_SCRIPT = r'''
           tab.tabIndex = selected ? 0 : -1;
         }
         if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
-        document.getElementById('headerStats').innerHTML = name==='expedition'&&summary?`<span>${summary.hole_count} скважин</span><span>${summary.total_sample_count ?? summary.sample_count} полевых проб</span>`:stats[name];
         if (name === 'truth') requestAnimationFrame(resizeCanvas);
       }
       for (const button of document.querySelectorAll('[data-workspace]')) button.addEventListener('click', () => activate(button.dataset.workspace));
@@ -245,7 +236,7 @@ WORKSPACE_SCRIPT = r'''
       const element = id => document.getElementById(id);
       const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character]));
       const number = value => Number(value).toLocaleString('ru-RU', {maximumFractionDigits: 8});
-      const tableNames = {borehole_collars: 'Скважины', borehole_lithology: 'Литология', borehole_assays: 'Анализы проб', downhole_properties: 'Физические свойства', downhole_gamma: 'Гамма-каротаж', structural_observations: 'Контакты и разломы', fault_intersections: 'Интервалы нарушений', surface_geochemistry: 'Почвенные пробы', trenches: 'Положение траншей', trench_intervals: 'Описание дна', trench_samples: 'Канавные пробы', quality_control: 'Контрольные пробы'};
+      const tableNames = {borehole_collars: 'Скважины', borehole_lithology: 'Литология', borehole_assays: 'Анализы проб', downhole_properties: 'Физические свойства', downhole_gamma: 'Гамма-каротаж', downhole_magnetic: 'Магнитный каротаж', structural_observations: 'Контакты и разломы', fault_intersections: 'Интервалы нарушений', surface_geochemistry: 'Почвенные пробы', trenches: 'Положение траншей', trench_intervals: 'Описание дна', trench_samples: 'Канавные пробы', quality_control: 'Контрольные пробы'};
       const fieldNames = {
         campaign_id: 'Экспедиция', hole_id: 'Скважина', x_m: 'X, м', y_m: 'Y, м', collar_elevation_m: 'Отметка устья, м',
         total_depth_m: 'Длина ствола, м', azimuth_deg: 'Азимут, °', dip_deg: 'Угол от горизонтали, °', coordinate_system: 'Система координат',
@@ -256,10 +247,11 @@ WORKSPACE_SCRIPT = r'''
         analysis_method: 'Метод анализа', laboratory: 'Лаборатория', certificate_id: 'Сертификат', qc_type: 'Тип пробы', qc_flag: 'Контроль качества',
         measurement_id: 'Измерение', depth_m: 'Вдоль ствола, м', density_g_cm3: 'Плотность, г/см³', porosity_percent: 'Пористость, %', measurement_method: 'Метод измерения',
         density_error_g_cm3: 'Погрешность плотности', porosity_error_percent: 'Погрешность пористости', observation_id: 'Наблюдение', feature_type: 'Тип структуры',
-        strike_deg: 'Простирание, °', dip_direction_deg: 'Направление падения, °', offset_estimate_m: 'Оценка смещения, м', observation_method: 'Метод наблюдения', notes: 'Примечания', counting_time_s: 'Время счёта, с'
+        strike_deg: 'Простирание, °', dip_direction_deg: 'Направление падения, °', offset_estimate_m: 'Оценка смещения, м', observation_method: 'Метод наблюдения', notes: 'Примечания', counting_time_s: 'Время счёта, с', magnetic_susceptibility_si: 'Магнитная восприимчивость, СИ', magnetic_sigma_si: 'Погрешность восприимчивости, СИ'
       };
       const categoryNames = {completed: 'Завершена', medium: 'Средняя', high: 'Высокая', low: 'Низкая', contact: 'Контакт', primary: 'Первичная', not_checked: 'Не проверено', core_logging: 'Описание керна', synthetic_core: 'Синтетическое бурение', synthetic_core_measurement: 'Синтетическое измерение', synthetic_assay: 'Синтетический анализ', local_cartesian: 'Локальная, м', lt: 'Ниже предела'};
       categoryNames.synthetic_gamma_logging = 'Синтетический гамма-каротаж';
+      categoryNames.synthetic_magnetic_logging = 'Синтетический магнитный каротаж';
       const pageSize = 50;
       const terrainTypes = {
         hill: {label: 'Возвышенность', color: '#ad542c'}, depression: {label: 'Понижение', color: '#226caa'},
@@ -279,7 +271,7 @@ WORKSPACE_SCRIPT = r'''
       const hybridDrilling = observations.plan.layout === 'hybrid';
       const drillingTargets = new Map(Object.entries(observations.drilling_targets ?? {}));
       const drillingKinds = {
-        random: {label: 'Случайное размещение', color: '#1677a8'},
+        random: {label: 'Случайное размещение', color: '#355d48'},
         magnetic: {label: 'Магнитная аномалия', color: '#b45d15'},
         gamma: {label: 'Повышенный гамма-фон', color: '#783fb3'}
       };
@@ -321,9 +313,6 @@ WORKSPACE_SCRIPT = r'''
       element('profileAnalyte').innerHTML = analyteOptions;
       const filterAnalytes = [...new Map([...observations.plan.analytes, ...(observations.plan.methods?.surface_geochemistry?.analytes || [])].map(item => [item.analyte, item])).values()];
       element('observationAnalyteFilter').innerHTML = '<option value="">Все компоненты</option>' + filterAnalytes.map(item => `<option value="${escape(item.analyte)}">${escape(item.analyte)} · ${escape(item.unit)}</option>`).join('');
-      element('expeditionNotes').innerHTML = observations.notes.map(note => `<li>${escape(note)}</li>`).join('');
-      const layout = {grid: 'регулярная сетка', random: 'случайные точки', manual: 'ручной план', hybrid: 'случайные точки и сгущение по геофизической съёмке'}[observations.plan.layout];
-      element('expeditionPlan').textContent = `Размещение скважин: ${layout}. Интервал скважинных проб: ${number(observations.plan.sample_length_m)} м. Всего пропущено проб: ${summary.total_missing_sample_count ?? summary.missing_sample_count}. Режим: ${observations.plan.ideal ? 'идеальные наблюдения' : 'с погрешностями'}. Параметры экспедиции задаются при генерации.`;
 
       function addMethodButtons(methods, containerId, activate) {
         const container = element(containerId);
@@ -342,7 +331,7 @@ WORKSPACE_SCRIPT = r'''
         const scale = Math.min(560 / width, 230 / height), w = width * scale, h = height * scale;
         const left = (650 - w) / 2, top = 22;
         const point = (x, y) => ({x: left + x * scale, y: top + h - y * scale});
-        const markup = `<rect x="${left}" y="${top}" width="${w}" height="${h}" rx="5" fill="#f0f6f8" stroke="#b7ccd8"/><text x="${left}" y="${top - 7}" font-size="11" fill="#627d98">Y · ${number(height)} м</text><text x="${left}" y="${top + h + 20}" font-size="11" fill="#627d98">0</text><text x="${left + w}" y="${top + h + 20}" text-anchor="end" font-size="11" fill="#627d98">X · ${number(width)} м</text>`;
+        const markup = `<rect x="${left}" y="${top}" width="${w}" height="${h}" rx="0" fill="#f4f0e5" stroke="#b8b8a9"/><text x="${left}" y="${top - 7}" font-size="11" fill="#62675e">Y · ${number(height)} м</text><text x="${left}" y="${top + h + 20}" font-size="11" fill="#62675e">0</text><text x="${left + w}" y="${top + h + 20}" text-anchor="end" font-size="11" fill="#62675e">X · ${number(width)} м</text>`;
         return {point, markup};
       }
       function download(content, filename, type) {
@@ -404,11 +393,11 @@ WORKSPACE_SCRIPT = r'''
         const scale = Math.min(435 / width, 235 / height);
         const w = width * scale, h = height * scale;
         const left = (520 - w) / 2, top = 18;
-        let markup = `<rect x="${left}" y="${top}" width="${w}" height="${h}" rx="4" fill="#f0f6f8" stroke="#b7ccd8"/>`;
+        let markup = `<rect x="${left}" y="${top}" width="${w}" height="${h}" rx="0" fill="#f4f0e5" stroke="#b8b8a9"/>`;
         for (let index = 1; index < 5; index++) {
-          markup += `<path d="M ${left + w * index / 5} ${top} v ${h} M ${left} ${top + h * index / 5} h ${w}" stroke="#dce7ed" stroke-dasharray="3 4"/>`;
+          markup += `<path d="M ${left + w * index / 5} ${top} v ${h} M ${left} ${top + h * index / 5} h ${w}" stroke="#dcd9ce" stroke-dasharray="3 4"/>`;
         }
-        markup += `<text x="${left}" y="${top + h + 19}" font-size="11" fill="#627d98">0</text><text x="${left + w}" y="${top + h + 19}" text-anchor="end" font-size="11" fill="#627d98">X · ${number(width)} м</text><text x="${left}" y="${top - 6}" font-size="10" fill="#627d98">Y · ${number(height)} м</text>`;
+        markup += `<text x="${left}" y="${top + h + 19}" font-size="11" fill="#62675e">0</text><text x="${left + w}" y="${top + h + 19}" text-anchor="end" font-size="11" fill="#62675e">X · ${number(width)} м</text><text x="${left}" y="${top - 6}" font-size="10" fill="#62675e">Y · ${number(height)} м</text>`;
         for (const hole of sourceRows('borehole_collars')) {
           const cx = left + hole.x_m * scale, cy = top + h - hole.y_m * scale;
           const end = holePosition(hole, hole.total_depth_m);
@@ -417,8 +406,8 @@ WORKSPACE_SCRIPT = r'''
           const target = drillingTargets.get(hole.hole_id);
           const kind = target?.method ?? 'random';
           const placement = hybridDrilling ? ` · ${drillingKinds[kind].label}${target ? ` · ${target.observation_id}` : ''}` : '';
-          const color = hybridDrilling ? drillingKinds[kind].color : selected ? '#e95e2a' : '#1677a8';
-          const border = selected && hybridDrilling ? '#102a43' : 'white';
+          const color = hybridDrilling ? drillingKinds[kind].color : selected ? '#a35a35' : '#355d48';
+          const border = selected && hybridDrilling ? '#25362e' : 'white';
           if (hole.dip_deg !== -90) markup += `<line class="hole-dot" data-hole="${escape(hole.hole_id)}" data-hole-trajectory="${escape(hole.hole_id)}" x1="${cx}" y1="${cy}" x2="${ex}" y2="${ey}" stroke="${color}" stroke-width="${selected ? 4 : 2}" opacity="${selected ? 1 : .55}"><title>${escape(hole.hole_id)} · проекция ствола</title></line><circle cx="${ex}" cy="${ey}" r="3" fill="${color}"/>`;
           markup += `<circle class="hole-dot" role="button" tabindex="0" aria-label="${escape(hole.hole_id + placement)}" aria-pressed="${selected}" data-hole="${escape(hole.hole_id)}" cx="${cx}" cy="${cy}" r="${selected ? 7 : 5}" fill="${color}" stroke="${border}" stroke-width="2"><title>${escape(hole.hole_id + placement)} · ствол ${number(hole.total_depth_m)} м · угол ${number(hole.dip_deg)}° · азимут ${number(hole.azimuth_deg)}°</title></circle>`;
         }
@@ -437,78 +426,13 @@ WORKSPACE_SCRIPT = r'''
         renderReconstruction(result);
         element('recognitionEmpty').classList.add('hidden');
         element('recognitionContent').classList.remove('hidden');
-        const {targets, summary: searchSummary, campaign} = result;
-        const {width_m: width, height_m: height} = campaign;
-        const scale = Math.min(435 / width, 235 / height);
-        const left = (520 - width * scale) / 2, top = 20, bottom = top + height * scale;
-        const x = value => left + value * scale;
-        const y = value => bottom - value * scale;
-        const line = (a, b, color, thickness) => `<line x1="${x(a[0])}" y1="${y(a[1])}" x2="${x(b[0])}" y2="${y(b[1])}" stroke="${color}" stroke-width="${thickness}" stroke-linecap="round"/>`;
-        const dot = (a, color, size, title) => `<circle cx="${x(a[0])}" cy="${y(a[1])}" r="${size}" fill="${color}"><title>${escape(title)}</title></circle>`;
-        let plan = `<rect x="${left}" y="${top}" width="${width * scale}" height="${height * scale}" rx="4" fill="#f0f6f8" stroke="#b7ccd8"/>`;
-        plan += `<text x="${left}" y="${top - 6}" font-size="11" fill="#486581">Y · ${number(height)} м</text><text x="${x(width)}" y="${bottom + 18}" text-anchor="end" font-size="11" fill="#486581">X · ${number(width)} м</text>`;
-        for (const row of new Map((tables.surface_geochemistry || []).map(row => [row.sample_id, row])).values()) {
-          plan += dot([row.x_m, row.y_m], '#9caebc', 2, row.sample_id);
-        }
-        for (const hole of holes) {
-          const end = holePosition(hole, hole.total_depth_m);
-          plan += line([hole.x_m, hole.y_m], [end.x, end.y], '#76a8bd', 1.5) + dot([hole.x_m, hole.y_m], '#458eab', 3, hole.hole_id);
-        }
-        for (const trench of tables.trenches || []) {
-          plan += line([trench.start_x_m, trench.start_y_m], [trench.end_x_m, trench.end_y_m], '#458eab', 2);
-        }
-        for (const anomaly of result.geophysical_anomalies || []) {
-          const channel = geophysicalChannels[anomaly.method];
-          plan += dot([anomaly.x_m, anomaly.y_m], '#9354b5', 3, `${anomaly.observation_id} · ${channel.label} · ${number(anomaly.deviation)} ${channel.unit} от фона`);
-        }
-
-        element('recognitionSummary').textContent = targets.length
-          ? `Минерализованных интервалов — ${number(searchSummary.mineralized_intervals)} · почвенных аномалий — ${number(searchSummary.soil_anomalies)}`
-          : 'Ни один результат не прошёл поисковые пороги. Участок обследован по отдельным траекториям и точкам отбора проб.';
-        if (searchSummary.geophysical_anomaly_count) element('recognitionSummary').textContent += ` · Геофизических аномалий — ${number(searchSummary.geophysical_anomaly_count)}`;
-        if (searchSummary.downhole_gamma_anomaly_count) element('recognitionSummary').textContent += ` · Гамма-аномалий в скважинах — ${number(searchSummary.downhole_gamma_anomaly_count)}`;
-        const analyte = element('recognitionAnalyte');
-        analyte.innerHTML = '<option value="">Все компоненты</option>' + [...new Set(targets.map(target => target.analyte))].sort()
-          .map(name => `<option value="${escape(name)}">${escape(name)}</option>`).join('');
-        const signalNames = {
-          host_rock: 'Вмещающая порода', observed_fault: 'Разлом', steep_fault: 'Крутое падение разлома',
-          observed_contact: 'Контакт пород', intrusive_rock: 'Порода интрузии', compatible_core_properties: 'Плотность и пористость согласуются',
-          adjacent_positive_samples: 'Смежные пробы', nearby_soil_anomaly: 'Аномалия рядом',
-          terrain_bauxite_depression: 'Понижение над карбонатным контактом', terrain_exposed_host: 'Рядом выход подходящей породы',
-          geophysics_magnetic: 'Магнитное подтверждение', geophysics_gamma: 'Гамма-аномалия у поверхности',
-          downhole_gamma_anomaly: 'Аномалия гамма-каротажа'
-        };
-        function renderTargets() {
-          const shown = targets.filter(target => !analyte.value || target.analyte === analyte.value);
-          element('recognitionMap').innerHTML = plan + shown.map(target => {
-            const color = target.kind === 'soil_anomaly' ? '#168c86' : '#e95e2a';
-            const interval = target.start_xyz_m ? line(target.start_xyz_m, target.end_xyz_m, color, 4) : '';
-            return interval + dot(target.center_xyz_m, color, 5, `${target.analyte} · ${target.site_id}`);
-          }).join('');
-          element('recognitionTargets').innerHTML = shown.map(target => {
-            const depths = target.start_xyz_m ? `${number(target.start_xyz_m[2])}–${number(target.end_xyz_m[2])}` : '—';
-            const signals = target.supporting_signals.map(signal => signalNames[signal]);
-            if (target.geology?.core_properties?.conflicting_length_m > 0) signals.push('Есть расхождения со свойствами пород');
-            if (target.qc_warning_sample_ids.length || Object.keys(target.laboratory_alerts).length) signals.push('Есть замечания QA/QC');
-            const context = target.terrain_context;
-            const terrain = context ? `<div class="muted" data-terrain-observation="${escape(context.observation_id)}">Рельеф · ${escape(terrainTypes[context.terrain_type]?.label || context.terrain_type)} · ${escape(context.observation_id)}</div>` : '';
-            const outcrop = context?.outcrop ? `<div class="muted">Обнажение · ${escape(context.outcrop.observation_id)} · ${number(context.outcrop.distance_xy_m)} м</div>` : '';
-            const field = target.geophysical_evidence;
-            const geophysics = field ? `<div class="muted">Геофизика · ${escape(field.observation_id)} · ${number(field.distance_xy_m)} м</div>` : '';
-            const gamma = target.downhole_gamma_evidence;
-            const gammaEvidence = gamma ? `<div class="muted">Каротаж · ${number(gamma.peak_measured_cps)} имп/с · фон ${number(gamma.background_cps)} имп/с</div>` : '';
-            return `<tr><td>${escape(target.site_id)} · ${escape(target.analyte)}</td><td>${depths}</td><td>${number(target.peak_result)} / ${number(target.threshold)} ${escape(target.unit)}</td><td>${signals.join(', ') || '—'}${terrain}${outcrop}${geophysics}${gammaEvidence}</td></tr>`;
-          }).join('') || '<tr><td colspan="4">Нет целей по выбранным наблюдениям</td></tr>';
-        }
-        analyte.addEventListener('change', renderTargets);
         element('downloadRecognition').addEventListener('click', () => download(JSON.stringify(result, null, 2), 'recognition.json', 'application/json'));
-        renderTargets();
       }
       function drawTrajectory(hole) {
         const end = holePosition(hole, hole.total_depth_m);
         const scale = Math.min(480 / Math.max(1, end.horizontal), 135 / Math.max(1, end.depth));
         const x = 110 + end.horizontal * scale, y = 24 + end.depth * scale;
-        element('holeTrajectory').innerHTML = `<text x="18" y="14" font-size="12" fill="#486581">Вертикальная глубина</text><path d="M 110 24 V 164 H 630" fill="none" stroke="#b7ccd8"/><path d="M 110 24 V ${y} H ${x}" fill="none" stroke="#b7ccd8" stroke-dasharray="4 4"/><path data-borehole-path="${escape(hole.hole_id)}" d="M 110 24 L ${x} ${y}" fill="none" stroke="#e95e2a" stroke-width="4"/><circle cx="110" cy="24" r="4" fill="#1677a8"/><circle cx="${x}" cy="${y}" r="4" fill="#e95e2a"/><text x="98" y="${y + 4}" text-anchor="end" font-size="11" fill="#486581">${number(end.depth)} м</text><text x="${x}" y="181" text-anchor="middle" font-size="11" fill="#486581">${number(end.horizontal)} м</text><text x="630" y="197" text-anchor="end" font-size="11" fill="#627d98">Горизонтальное отклонение от устья</text>`;
+        element('holeTrajectory').innerHTML = `<text x="18" y="14" font-size="12" fill="#555e50">Вертикальная глубина</text><path d="M 110 24 V 164 H 630" fill="none" stroke="#b8b8a9"/><path d="M 110 24 V ${y} H ${x}" fill="none" stroke="#b8b8a9" stroke-dasharray="4 4"/><path data-borehole-path="${escape(hole.hole_id)}" d="M 110 24 L ${x} ${y}" fill="none" stroke="#a35a35" stroke-width="4"/><circle cx="110" cy="24" r="4" fill="#355d48"/><circle cx="${x}" cy="${y}" r="4" fill="#a35a35"/><text x="98" y="${y + 4}" text-anchor="end" font-size="11" fill="#555e50">${number(end.depth)} м</text><text x="${x}" y="181" text-anchor="middle" font-size="11" fill="#555e50">${number(end.horizontal)} м</text><text x="630" y="197" text-anchor="end" font-size="11" fill="#62675e">Горизонтальное отклонение от устья</text>`;
         element('holeTrajectoryCaption').textContent = `Забой: X ${number(end.x)} · Y ${number(end.y)} м · вертикальная глубина ${number(end.depth)} м. Траектория рассчитана по измеренному устью и заданному направлению.`;
       }
       function selectHole(holeId) {
@@ -521,43 +445,44 @@ WORKSPACE_SCRIPT = r'''
       element('surveyMap').addEventListener('click', event => { const dot = event.target.closest('[data-hole]'); if (dot) selectHole(dot.dataset.hole); });
       element('surveyMap').addEventListener('keydown', event => { if (!['Enter', ' '].includes(event.key)) return; const dot = event.target.closest('[data-hole]'); if (dot) { event.preventDefault(); const id = dot.dataset.hole; selectHole(id); [...element('surveyMap').querySelectorAll('[data-hole]')].find(item => item.dataset.hole === id)?.focus(); } });
 
-      function drawGammaProfile(hole) {
-        const rows = (tables.downhole_gamma || []).filter(row => row.hole_id === hole?.hole_id)
-          .sort((a, b) => a.from_m - b.from_m);
-        element('gammaProfilePanel').classList.toggle('hidden', !rows.length);
-        if (!rows.length) {
-          element('gammaProfile').innerHTML = '';
-          element('gammaProfileCaption').textContent = '';
-          return;
-        }
-        const peak = rows.reduce((maximum, row) => Math.max(maximum, row.gamma_count_rate_cps), 0);
-        const maximum = Math.max(1, peak);
-        const left = 105, width = 540, top = 36, height = 230;
-        const x = value => left + value / maximum * width;
-        const y = depth => top + depth / hole.total_depth_m * height;
-        let markup = '<text x="12" y="18" font-size="11" fill="#486581">Вдоль ствола</text><text x="105" y="18" font-size="12" fill="#486581">Гамма-сигнал, имп/с</text>';
-        for (let i = 0; i <= 5; i++) {
-          const depth = hole.total_depth_m * i / 5, value = maximum * i / 5;
-          markup += `<path d="M ${left} ${y(depth)} H ${left + width} M ${x(value)} ${top} V ${top + height}" stroke="#e8edf2"/><text x="94" y="${y(depth) + 4}" text-anchor="end" font-size="11" fill="#627d98">${number(depth)} м</text><text x="${x(value)}" y="286" text-anchor="middle" font-size="10" fill="#627d98">${number(Number(value.toFixed(1)))}</text>`;
+      const boreholeLogChannels = {
+        gamma: {table:'downhole_gamma', field:'gamma_count_rate_cps', sigma:'gamma_sigma_cps', unit:'имп/с', title:'Гамма-сигнал, имп/с', color:'#9354b5', axisFactor:1, minimumSpan:1, signed:false},
+        magnetic: {table:'downhole_magnetic', field:'magnetic_susceptibility_si', sigma:'magnetic_sigma_si', unit:'СИ', title:'Магнитная восприимчивость, ×10⁻³ СИ', color:'#a35a35', axisFactor:1000, minimumSpan:0.000001, signed:true},
+      };
+      function drawBoreholeLogProfile(hole, channel) {
+        const spec=boreholeLogChannels[channel], prefix=channel+'Profile';
+        const rows=(tables[spec.table]||[]).filter(row=>row.hole_id===hole?.hole_id).sort((a,b)=>a.from_m-b.from_m);
+        element(prefix+'Panel').classList.toggle('hidden',!rows.length);
+        if(!rows.length){element(prefix).innerHTML='';element(prefix+'Caption').textContent='';return;}
+        const peak=rows.reduce((value,row)=>Math.max(value,row[spec.field]),-Infinity);
+        const minimum=spec.signed?rows.reduce((value,row)=>Math.min(value,row[spec.field]),0):0;
+        const maximum=Math.max(minimum+spec.minimumSpan,0,peak);
+        const left=105,width=540,top=36,height=230;
+        const x=value=>left+(value-minimum)/(maximum-minimum)*width;
+        const y=depth=>top+depth/hole.total_depth_m*height;
+        const measured=value=>Number(value).toLocaleString('ru-RU',{maximumFractionDigits:9});
+        let markup='<text x="12" y="18" font-size="11" fill="#555e50">Вдоль ствола</text><text x="105" y="18" font-size="12" fill="#555e50">'+spec.title+'</text>';
+        for(let i=0;i<=5;i++){
+          const depth=hole.total_depth_m*i/5,value=minimum+(maximum-minimum)*i/5;
+          markup+=`<path d="M ${left} ${y(depth)} H ${left+width} M ${x(value)} ${top} V ${top+height}" stroke="#e4e1d7"/><text x="94" y="${y(depth)+4}" text-anchor="end" font-size="11" fill="#62675e">${number(depth)} м</text><text x="${x(value)}" y="286" text-anchor="middle" font-size="10" fill="#62675e">${number(Number((value*spec.axisFactor).toFixed(spec.signed?6:1)))}</text>`;
         }
         let previous;
-        for (const row of rows) {
-          const rate = x(row.gamma_count_rate_cps), start = y(row.from_m), end = y(row.to_m);
-          if (previous && Math.abs(previous.to_m - row.from_m) < 1e-6) {
-            markup += `<path d="M ${x(previous.gamma_count_rate_cps)} ${start} H ${rate}" stroke="#9354b5" stroke-width="1.5"/>`;
-          }
-          markup += `<path data-gamma-measurement="${escape(row.measurement_id)}" d="M ${rate} ${start} V ${end}" stroke="#9354b5" stroke-width="2.5"><title>${escape(row.measurement_id)} · ${number(row.from_m)}–${number(row.to_m)} м · ${number(row.gamma_count_rate_cps)} имп/с ± ${number(row.gamma_sigma_cps)}</title></path>`;
-          previous = row;
+        for(const row of rows){
+          const rate=x(row[spec.field]),start=y(row.from_m),end=y(row.to_m);
+          if(previous&&Math.abs(previous.to_m-row.from_m)<1e-6)markup+=`<path d="M ${x(previous[spec.field])} ${start} H ${rate}" stroke="${spec.color}" stroke-width="1.5"/>`;
+          markup+=`<path data-${channel}-measurement="${escape(row.measurement_id)}" d="M ${rate} ${start} V ${end}" stroke="${spec.color}" stroke-width="2.5"><title>${escape(row.measurement_id)} · ${number(row.from_m)}–${number(row.to_m)} м · ${measured(row[spec.field])} ${spec.unit} ± ${measured(row[spec.sigma])}</title></path>`;
+          previous=row;
         }
-        element('gammaProfile').innerHTML = markup;
-        element('gammaProfileCaption').textContent = `${number(rows.length)} измерений · максимум ${number(peak)} имп/с`;
+        element(prefix).innerHTML=markup;
+        element(prefix+'Caption').textContent=`${number(rows.length)} измерений · максимум ${measured(peak)} ${spec.unit}`;
       }
 
       function drawProfile() {
         const hole = holes.find(item => item.hole_id === selectedHole);
         element('profileHole').value = selectedHole ?? '';
         element('profileAnalyte').disabled = !hole;
-        drawGammaProfile(hole);
+        drawBoreholeLogProfile(hole,'gamma');
+        drawBoreholeLogProfile(hole,'magnetic');
         if (!hole) {
           element('holeProfileTitle').textContent = 'В этом источнике нет скважин';
           for (const id of ['holeProfileCaption', 'holeTrajectoryCaption']) element(id).textContent = '';
@@ -573,23 +498,23 @@ WORKSPACE_SCRIPT = r'''
         const target = drillingTargets.get(hole.hole_id);
         element('holeProfileTitle').textContent = target ? `${selectedHole} · ${drillingKinds[target.method].label} · ${target.observation_id}` : selectedHole;
         element('holeProfileCaption').textContent = `Устье X ${number(hole.x_m)} · Y ${number(hole.y_m)} м · ствол ${number(hole.total_depth_m)} м · угол ${number(hole.dip_deg)}° · азимут ${number(hole.azimuth_deg)}°`;
-        let markup = '<text x="12" y="18" font-size="11" fill="#486581">Вдоль ствола</text><text x="162" y="18" font-size="12" fill="#486581">Описание керна</text><text x="380" y="18" font-size="12" fill="#486581">Содержание по пробам</text>';
+        let markup = '<text x="12" y="18" font-size="11" fill="#555e50">Вдоль ствола</text><text x="162" y="18" font-size="12" fill="#555e50">Описание керна</text><text x="380" y="18" font-size="12" fill="#555e50">Содержание по пробам</text>';
         for (let index = 0; index <= 5; index++) {
           const y = 36 + index * 46;
-          markup += `<path d="M 105 ${y} H 640" stroke="#e8edf2"/><text x="94" y="${y + 4}" text-anchor="end" font-size="11" fill="#627d98">${number(index * hole.total_depth_m / 5)} м</text>`;
+          markup += `<path d="M 105 ${y} H 640" stroke="#e4e1d7"/><text x="94" y="${y + 4}" text-anchor="end" font-size="11" fill="#62675e">${number(index * hole.total_depth_m / 5)} м</text>`;
         }
         for (const log of logs) {
-          const color = rocks[log.observed_rock_id]?.color || '#b7ccd8';
+          const color = rocks[log.observed_rock_id]?.color || '#b8b8a9';
           const y = 36 + log.from_m * scale, h = (log.to_m - log.from_m) * scale;
           markup += `<rect x="118" y="${y}" width="50" height="${h}" fill="${escape(color)}" stroke="white" stroke-width=".7"><title>${escape(log.observed_rock_name)} · ${number(log.from_m)}–${number(log.to_m)} м</title></rect>`;
-          if (h > 13) markup += `<text x="180" y="${y + h / 2 + 4}" font-size="10" fill="#486581">${escape(log.observed_rock_name)}</text>`;
+          if (h > 13) markup += `<text x="180" y="${y + h / 2 + 4}" font-size="10" fill="#555e50">${escape(log.observed_rock_name)}</text>`;
         }
         for (const assay of assays) {
           const below = assay.result_qualifier === 'lt';
           const y = 36 + assay.from_m * scale, h = Math.max(.6, (assay.to_m - assay.from_m) * scale - .4);
           markup += `<rect x="${axisLeft}" y="${y}" width="${Math.max(1, assay.result_value / maximum * axisWidth)}" height="${h}" fill="${below ? '#b7c9d5' : '#168c86'}"><title>${number(assay.from_m)}–${number(assay.to_m)} м: ${below ? '&lt; ' : ''}${number(assay.result_value)} ${escape(assay.unit)}</title></rect>`;
         }
-        markup += `<text x="${axisLeft}" y="286" font-size="10" fill="#627d98">0</text><text x="${axisLeft + axisWidth}" y="286" text-anchor="end" font-size="10" fill="#627d98">${number(maximum)} ${escape(observations.plan.analytes.find(item => item.analyte === analyte)?.unit ?? '')}</text>`;
+        markup += `<text x="${axisLeft}" y="286" font-size="10" fill="#62675e">0</text><text x="${axisLeft + axisWidth}" y="286" text-anchor="end" font-size="10" fill="#62675e">${number(maximum)} ${escape(observations.plan.analytes.find(item => item.analyte === analyte)?.unit ?? '')}</text>`;
         element('holeProfile').innerHTML = markup;
         element('profileKey').innerHTML = '<span><i style="background:#168c86"></i>Измеренный результат</span><span><i style="background:#b7c9d5"></i>Верхняя граница: ниже предела обнаружения</span><span>Пустой участок — проба пропущена</span>';
         drawTrajectory(hole);
@@ -639,7 +564,7 @@ WORKSPACE_SCRIPT = r'''
         element(prefix + 'TableHead').innerHTML = '<tr>' + fields.map(field => `<th scope="col" title="${escape(field)}">${escape(fieldNames[field] || field)}</th>`).join('') + '</tr>';
         element(prefix + 'TableBody').innerHTML = rows.slice(page * pageSize, (page + 1) * pageSize).map(row => '<tr>' + fields.map(field => {
           const value = row[field];
-          const display = value === null || value === undefined || value === '' ? '—' : typeof value === 'number' ? number(value) : categoryNames[value] || value;
+          const display = value === null || value === undefined || value === '' ? '—' : typeof value === 'number' ? ((field==='magnetic_susceptibility_si'||field==='magnetic_sigma_si')?value.toLocaleString('ru-RU',{maximumFractionDigits:9}):number(value)) : categoryNames[value] || value;
           return `<td>${escape(display)}</td>`;
         }).join('') + '</tr>').join('') || `<tr><td colspan="${fields.length}">${emptyMessage}</td></tr>`;
         element(prefix + 'Count').textContent = `${number(rows.length)} записей`;
@@ -664,7 +589,6 @@ WORKSPACE_SCRIPT = r'''
       refreshFieldwork=()=>{
         for(const rock of observations.rock_catalog)rocks[rock.id]=rock;
         drawExpeditionMetrics();refreshSourceOptions();updateSourceHoles();
-        if(location.hash==='#expedition')element('headerStats').innerHTML=`<span>${summary.hole_count} скважин</span><span>${summary.total_sample_count} полевых проб</span>`;
         refreshFieldMethodRecords();page=0;renderTable();
       };
       renderRecognition(RECOGNITION_DATA);

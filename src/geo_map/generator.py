@@ -744,10 +744,12 @@ def _select_deposit_types(
     deposit_types: list[dict[str, Any]],
     count: int,
 ) -> list[dict[str, Any]]:
-    """Choose weighted mineral types without repeats for one map."""
+    """Prefer distinct types; reuse eligible types if more bodies are required."""
     available = deposit_types.copy()
     selected: list[dict[str, Any]] = []
     for deposit_index in range(count):
+        if not available:
+            available = deposit_types.copy()
         total_weight = sum(float(item["weight"]) for item in available)
         target = _stable_unit(seed, "deposit-type", deposit_index) * total_weight
         accumulated = 0.0
@@ -881,24 +883,19 @@ def _center_conflicts(
     center: tuple[float, float, float],
     radii: tuple[float, float, float],
     deposits: list[dict[str, Any]],
+    rotation_deg: float,
 ) -> bool:
-    x, y, z = center
-    radius_x, radius_y, radius_z = radii
+    def inside(point, body_center, body_radii, rotation):
+        dx, dy, dz = (a - b for a, b in zip(point, body_center, strict=True))
+        angle = math.radians(rotation)
+        rx, ry, rz = body_radii
+        x = dx * math.cos(angle) + dy * math.sin(angle)
+        y = -dx * math.sin(angle) + dy * math.cos(angle)
+        return (x / rx) ** 2 + (y / ry) ** 2 + (dz / rz) ** 2 < 1
+
     for existing in deposits:
-        other_x, other_y, other_z = existing["center_m"]
-        other_radius_x, other_radius_y, other_radius_z = existing["radii_m"]
-        inside_existing = (
-            ((x - other_x) / other_radius_x) ** 2
-            + ((y - other_y) / other_radius_y) ** 2
-            + ((z - other_z) / other_radius_z) ** 2
-            < 1
-        )
-        existing_inside_new = (
-            ((other_x - x) / radius_x) ** 2
-            + ((other_y - y) / radius_y) ** 2
-            + ((other_z - z) / radius_z) ** 2
-            < 1
-        )
+        inside_existing = inside(center, existing["center_m"], existing["radii_m"], existing["shape"]["rotation_deg"])
+        existing_inside_new = inside(existing["center_m"], center, radii, rotation_deg)
         if inside_existing or existing_inside_new:
             return True
     return False
@@ -995,15 +992,12 @@ def _generate_deposits(
         for definition in config["minerals"]
         if candidate_sets[definition["id"]]
     ]
-    if len(eligible_types) < count_low:
-        raise ValueError(
-            "Сгенерированная геология поддерживает только "
-            f"{len(eligible_types)} типов месторождений при минимуме {count_low}"
-        )
+    if not eligible_types and count_low > 0:
+        raise ValueError("Сгенерированная геология не поддерживает ни один тип месторождения")
     count = _sample_int(
         seed,
         count_low,
-        min(count_high, len(eligible_types)),
+        max(count_low, min(count_high, len(eligible_types))),
         "deposit-count",
     )
     selected_types = _select_deposit_types(seed, eligible_types, count)
@@ -1101,6 +1095,7 @@ def _generate_deposits(
                 center,
                 (candidate_radius_x, candidate_radius_y, radius_z),
                 deposits,
+                candidate_rotation,
             ):
                 selected_candidate = candidate
                 selected_center_z = center_z
@@ -1245,6 +1240,9 @@ def _deposit_slice_for_cell(
     delta_y = y - center_y
     rotated_x = delta_x * math.cos(angle) + delta_y * math.sin(angle)
     rotated_y = -delta_x * math.sin(angle) + delta_y * math.cos(angle)
+    # Irregularity can only shrink the ellipse. Skip distant cells before noise.
+    if (rotated_x / radius_x) ** 2 + (rotated_y / radius_y) ** 2 >= 1:
+        return None
     boundary_noise = _fractal_noise_2d(
         seed,
         x_index,
@@ -1477,8 +1475,9 @@ def _mineralization_for_deposit_cell(
     average_grade = max(deposit["display_threshold"], maximum_grade * 0.62)
     result: list[dict[str, Any]] = []
     for segment in segments:
-        rounded_top = round(segment["top"], 2)
-        rounded_bottom = round(segment["bottom"], 2)
+        # Terrain boundaries have millimetre precision; preserve them when clipping.
+        rounded_top = round(segment["top"], 3)
+        rounded_bottom = round(segment["bottom"], 3)
         if rounded_top >= rounded_bottom:
             continue
         item = {

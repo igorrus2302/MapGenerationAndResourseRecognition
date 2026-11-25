@@ -5,10 +5,11 @@ from pathlib import Path
 IMPORT_ENGINE = Path(__file__).with_name('observation_import.js').read_text(encoding='utf-8')
 
 IMPORT_STYLES = r'''
-    .import-panel { border:1px solid #b8c9d8; background:#f7fafc; border-radius:10px; padding:12px; margin:12px 0; }
-    .import-panel h3 { margin:0 0 7px; font-size:14px; }
-    .import-panel .data-downloads { align-items:center; }
-    .import-panel input[type="file"] { max-width:100%; width:auto; font:inherit; }
+    .import-panel { border:1px solid var(--line); border-left:3px solid var(--highlight); background:var(--paper); padding:14px; margin:14px 0; }
+    .import-panel h3 { margin:0 0 7px; font-size:14px; color:var(--ink); }
+    .import-panel .data-downloads { align-items:stretch; margin-bottom:10px; }
+    .import-panel .data-downloads button { flex:1 1 180px; width:auto; min-height:44px; display:flex; align-items:center; justify-content:center; text-align:center; padding:8px 12px; white-space:normal; overflow-wrap:anywhere; }
+    .import-panel input[type="file"] { display:none; }
     .import-panel .import-status { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; margin:10px 0 0; color:var(--muted); }
     .import-panel .import-status[data-state="success"] { color:#17674a; }
     .import-panel .import-status[data-state="error"] { color:#ba3327; }
@@ -24,9 +25,8 @@ def import_panel(prefix: str) -> str:
       <div class="data-downloads">
         <button type="button" id="{prefix}ImportTemplate">Скачать пустой CSV-шаблон</button>
         <button type="button" id="{prefix}ImportWorkbook">Шаблон Excel · XLSX</button>
-        <label class="primary-button" style="display:inline-flex;align-items:center;gap:7px;cursor:pointer">
-          <span>Загрузить файл</span><input id="{prefix}ImportFile" type="file" accept=".csv,.json,.geojson,.xlsx" aria-label="Загрузить наблюдения" />
-        </label>
+        <button type="button" class="primary-button" id="{prefix}ImportChoose">Загрузить файл</button>
+        <input id="{prefix}ImportFile" type="file" accept=".csv,.json,.geojson,.xlsx" aria-label="Загрузить наблюдения" hidden />
         <button type="button" id="{prefix}ImportExport">Скачать обновлённые наблюдения · JSON</button>
       </div>
       {whole}
@@ -66,11 +66,13 @@ IMPORT_UI = r'''
         workbookButton.addEventListener('click',()=>download(Uint8Array.from(atob(OBSERVATION_IMPORT_XLSX),ch=>ch.charCodeAt(0)),
           'manual_observations.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));
         element(prefix+'ImportExport').addEventListener('click',exportImportedObservations);
+        const chooseButton=element(prefix+'ImportChoose');
+        chooseButton.addEventListener('click',()=>input.click());
         input.addEventListener('change',async()=>{
           const file=input.files?.[0];if(!file)return;
           // Capture the current selection before an asynchronous read completes.
           const table=getTable(),allowed=getAllowedTables(),kind=getSourceKind();
-          input.disabled=true;
+          input.disabled=true;chooseButton.disabled=true;
           status.dataset.state='';status.textContent='Проверяется файл '+file.name+'…';
           try{
             const payload=file.name.toLowerCase().endsWith('.xlsx')
@@ -88,7 +90,7 @@ IMPORT_UI = r'''
             status.textContent=(result.added?'Файл принят. Добавлено записей: '+result.added+'. Точных повторов пропущено: '+result.duplicates+'.':'Файл уже представлен в наблюдениях. Все '+result.duplicates+' записей — точные дубликаты; данные не изменены.')+'\n'+detail+(result.added?'\nСохраните обновлённый JSON, чтобы использовать новые наблюдения после закрытия страницы.':'')+renderingWarning;
           }catch(error){
             status.dataset.state='error';status.textContent='Файл отклонён: '+error.message+'\nНаблюдения не изменены.';
-          }finally{input.disabled=false;input.value='';}
+          }finally{input.disabled=false;chooseButton.disabled=false;input.value='';}
         });
         updateHint();
         return updateHint;
