@@ -34,6 +34,12 @@
     "depth_sigma_m": 1.0,
     "orientation_sigma_deg": 3.0
   },
+  "downhole_gamma": {
+    "enabled": true,
+    "interval_m": 1,
+    "sigma_cps": 0.2,
+    "counting_time_s": 60
+  },
   "surface_geochemistry": {
     "enabled": true,
     "layout": "grid",

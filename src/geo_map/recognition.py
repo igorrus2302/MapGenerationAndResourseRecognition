@@ -13,7 +13,7 @@ from tempfile import NamedTemporaryFile
 from typing import Any
 
 from .boreholes import point as borehole_point
-from .recognition_geophysics import GEOPHYSICAL_SIGNALS, GeophysicalEvidence
+from .recognition_geophysics import GEOPHYSICAL_SIGNALS, DownholeGammaEvidence, GeophysicalEvidence
 from .recognition_terrain import SHALLOW_DEPTH_M, TERRAIN_SIGNALS, TerrainEvidence
 
 
@@ -325,6 +325,7 @@ def recognize_deposits(observations: dict[str, Any], mineral_catalog: dict[str, 
         targets.extend(_path_targets(tables, rules, rocks, duplicate_qc, counts[source], source))
     terrain = TerrainEvidence(observations)
     geophysics = GeophysicalEvidence(observations)
+    gamma_log = DownholeGammaEvidence(observations)
 
     # Use the nominal surface spacing as the radius for corroboration in XY only.
     point_count = len({row["sample_id"] for row in soil_rows})
@@ -352,6 +353,7 @@ def recognize_deposits(observations: dict[str, Any], mineral_catalog: dict[str, 
         target["laboratory_alerts"] = dict(lab_alerts.get(key, {}))
         terrain.annotate(target, rules_by_id.get(target.get("mineral_id")))
         geophysics.annotate(target)
+        gamma_log.annotate(target)
 
     def target_order(item):
         signals = set(item["supporting_signals"])
@@ -370,7 +372,9 @@ def recognize_deposits(observations: dict[str, Any], mineral_catalog: dict[str, 
                     "targets_with_terrain_context": sum("terrain_context" in item for item in targets),
                     "targets_supported_by_terrain": sum(not TERRAIN_SIGNALS.isdisjoint(item["supporting_signals"]) for item in targets),
                     "geophysical_anomaly_count": len(geophysics.anomalies),
-                    "targets_supported_by_geophysics": sum("geophysical_evidence" in item for item in targets),
+                    "downhole_gamma_anomaly_count": sum(len(rows) for rows in gamma_log.anomalies.values()),
+                    "targets_supported_by_downhole_gamma": sum("downhole_gamma_evidence" in item for item in targets),
+                    "targets_supported_by_geophysics": sum(not GEOPHYSICAL_SIGNALS.isdisjoint(item["supporting_signals"]) for item in targets),
                     "assays_by_source": {source: {status: values[status] for status in
                                         ("primary", "quantified", "below_detection", "failed_qc")}
                                          for source, values in counts.items()}},

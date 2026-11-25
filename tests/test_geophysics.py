@@ -69,6 +69,24 @@ class GeophysicsTests(unittest.TestCase):
             self.assertAlmostEqual(rows[index]["gamma_sigma_cps"], sigma, delta=0.00005)
         self.assertGreater(rows[-1]["gamma_sigma_cps"], rows[0]["gamma_sigma_cps"])
 
+    def test_downhole_gamma_supports_existing_deep_assay_target(self):
+        truth = self.truth(15)
+        self.config["downhole_gamma"] = {"enabled": True, "interval_m": 1}
+        bundle = generate_observations(truth, self.config, seed=1)
+        logs = [row for row in bundle["tables"]["downhole_gamma"] if row["hole_id"] == "BH-002"]
+        self.assertEqual(len(logs), 22)
+        self.assertTrue(all(row["gamma_sigma_cps"] == 0 for row in logs))
+        self.assertGreater(logs[15]["gamma_count_rate_cps"], logs[14]["gamma_count_rate_cps"])
+        self.assertEqual(logs[15]["gamma_count_rate_cps"], logs[19]["gamma_count_rate_cps"])
+        recognition = recognize_deposits(bundle, self.minerals)
+        target = next(item for item in recognition["targets"] if item["mineral_id"] == "uranium")
+        self.assertIn("downhole_gamma_anomaly", target["supporting_signals"])
+        self.assertNotIn("geophysics_gamma", target["supporting_signals"])
+        self.assertIn(logs[15]["measurement_id"], target["downhole_gamma_evidence"]["measurement_ids"])
+        bundle["tables"]["downhole_gamma"] = []
+        target = next(item for item in recognize_deposits(bundle, self.minerals)["targets"] if item["mineral_id"] == "uranium")
+        self.assertNotIn("downhole_gamma_anomaly", target["supporting_signals"])
+
     def test_recomputing_saved_fields_uses_current_rock_calibration(self):
         truth = self.truth(5)
         index = 4

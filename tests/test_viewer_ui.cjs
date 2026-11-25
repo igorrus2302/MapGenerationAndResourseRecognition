@@ -183,6 +183,15 @@ if (!observations) {
   } else {
     assert.equal(get('holeProfileTitle').textContent, lastHole);
   }
+  const gammaRows = (observations.tables.downhole_gamma || []).filter(row => row.hole_id === lastHole);
+  assert.equal(get('gammaProfilePanel').classList.contains('hidden'), !gammaRows.length);
+  if (gammaRows.length) {
+    assert.ok(get('gammaProfile').innerHTML.includes(gammaRows[0].measurement_id));
+    assert.ok(!get('gammaProfile').innerHTML.includes('NaN'));
+    const gammaTab = get('observationTabs').children.find(button => button.textContent === 'Гамма-каротаж');
+    gammaTab.click();
+    assert.match(get('observationTableHead').innerHTML, /gamma_count_rate_cps/);
+  }
   get('observationTabs').children[2].click();
   assert.match(get('observationTableHead').innerHTML, /Компонент/);
   assert.equal(get('analyteFilterLabel').classList.contains('hidden'), false);

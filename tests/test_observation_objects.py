@@ -19,6 +19,7 @@ class ObservationObjectTests(unittest.TestCase):
         config = extended_config()
         config["analytes"].append({"analyte": "Fe", "unit": "% Fe", "detection_limit": .01})
         config["drilling"]["holes"][1].update(azimuth_deg=270, dip_deg=-60)
+        config["downhole_gamma"] = {"enabled": True, "interval_m": 1}
         bundle = generate_observations(extended_map(), config, seed=1)
         with tempfile.TemporaryDirectory() as temp:
             root = save_observations(bundle, temp).parent / "objects"
@@ -43,6 +44,10 @@ class ObservationObjectTests(unittest.TestCase):
                 "BH-001": f"{vertical}/BH-001.json", "BH-002": f"{inclined}/BH-002.json",
             })
             hole = read_json(root / f"{vertical}/BH-001.json")
+            gamma_path = f"{vertical}/gamma_log/BH-001.json"
+            self.assertEqual(hole["gamma_log_files"], [gamma_path])
+            self.assertEqual(read_json(root / gamma_path)["tables"]["downhole_gamma"],
+                             [row for row in bundle["tables"]["downhole_gamma"] if row["hole_id"] == "BH-001"])
             self.assertEqual(len(hole["sample_files"]), 5)
             for path in hole["sample_files"]:
                 self.assertEqual(Path(path).parent.as_posix(), f"{vertical}/samples")

@@ -99,7 +99,8 @@ def main() -> None:
         rock_catalog = config
     observation_config = load_observation_config(args.observations_config)
     observation_seed = secrets.randbits(63) if args.observation_seed is None else args.observation_seed
-    observations = generate_observations(data, observation_config, seed=observation_seed)
+    observations = generate_observations(data, observation_config, seed=observation_seed,
+                                         mineral_catalog=mineral_catalog)
     recognition = recognize_deposits(observations, mineral_catalog, rock_catalog=rock_catalog)
     map_path = save_map(data, args.output / "map.json")
     observation_path = save_observations(observations, args.output / "observations")
@@ -135,6 +136,7 @@ def main() -> None:
     print(f"Точек геофизической съёмки: {observations['summary']['geophysical_observation_count']}")
     print(f"Магнитных наблюдений: {observations['summary']['magnetic_observation_count']}")
     print(f"Гамма-наблюдений: {observations['summary']['gamma_observation_count']}")
+    print(f"Измерений гамма-каротажа: {observations['summary']['gamma_log_count']}")
     print(f"Траншей: {observations['summary']['trench_count']}")
     print(f"Наблюдений зон разломов: {observations['summary']['fault_observation_count']}")
     print(f"Контрольных проб: {observations['summary']['qc_sample_count']}")

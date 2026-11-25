@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from statistics import median
 
 from .geophysical_observations import geophysical_rows
@@ -10,7 +11,7 @@ from .recognition_spatial import index_points, nearest_point, survey_radius
 
 
 METHOD_RULES = {"iron": ("magnetic", 150.0), "uranium": ("gamma", 2.0)}
-GEOPHYSICAL_SIGNALS = {"geophysics_magnetic", "geophysics_gamma"}
+GEOPHYSICAL_SIGNALS = {"geophysics_magnetic", "geophysics_gamma", "downhole_gamma_anomaly"}
 UNITS = {"magnetic": "nT", "gamma": "cps"}
 FLOOR_DEVIATION = {"magnetic": 8, "gamma": 4}
 MIN_MEASUREMENTS = 8
@@ -90,3 +91,40 @@ class GeophysicalEvidence:
             target["supporting_signals"].append(f"geophysics_{method}")
             target["geophysical_evidence"] = {**anomaly, "distance_xy_m": round(distance, 3),
                                               "depth_below_surface_m": round(depth, 3)}
+
+
+class DownholeGammaEvidence:
+    """Use elevated measured gamma intervals as supporting evidence in the same borehole."""
+
+    def __init__(self, observations):
+        profiles = defaultdict(list)
+        self.anomalies = defaultdict(list)
+        for row in observations["tables"].get("downhole_gamma", ()):
+            if row.get("gamma_count_rate_cps") is not None:
+                profiles[row["hole_id"]].append(row)
+        for hole_id, rows in profiles.items():
+            if len(rows) < MIN_MEASUREMENTS:
+                continue
+            background = median(row["gamma_count_rate_cps"] for row in rows)
+            spread = median(abs(row["gamma_count_rate_cps"] - background) for row in rows)
+            threshold = max(FLOOR_DEVIATION["gamma"], 3.5 * 1.4826 * spread,
+                            3 * median(row.get("gamma_sigma_cps") or 0 for row in rows))
+            for row in sorted(rows, key=lambda item: item["from_m"]):
+                required = max(threshold, 3 * (row.get("gamma_sigma_cps") or 0))
+                if row["gamma_count_rate_cps"] - background >= required:
+                    self.anomalies[hole_id].append({**row, "background_value": background,
+                                                    "deviation_threshold": required})
+
+    def annotate(self, target):
+        if target["source"] != "borehole" or target.get("mineral_id") != "uranium":
+            return
+        matches = [row for row in self.anomalies.get(target["site_id"], ())
+                   if max(row["from_m"], target["from_m"]) < min(row["to_m"], target["to_m"])]
+        if matches:
+            target["supporting_signals"].append("downhole_gamma_anomaly")
+            peak = max(matches, key=lambda row: row["gamma_count_rate_cps"])
+            target["downhole_gamma_evidence"] = {
+                "measurement_ids": [row["measurement_id"] for row in matches],
+                "peak_measured_cps": peak["gamma_count_rate_cps"],
+                "background_cps": peak["background_value"],
+            }

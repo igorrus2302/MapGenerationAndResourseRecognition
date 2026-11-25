@@ -7,12 +7,13 @@
 | Файл | Назначение |
 | --- | --- |
 | `borehole_sources.json` | Перечень самостоятельных источников вертикального и наклонного бурения |
-| `sources/vertical_boreholes/` | Отдельный JSON и шесть CSV с примером вертикальной скважины |
-| `sources/inclined_boreholes/` | Отдельный JSON и шесть CSV с примером наклонной скважины |
+| `sources/vertical_boreholes/` | Отдельный JSON и семь CSV с примером вертикальной скважины |
+| `sources/inclined_boreholes/` | Отдельный JSON и семь CSV с примером наклонной скважины |
 | `borehole_collars.csv` | Положение, ориентация и состояние скважин |
 | `borehole_lithology.csv` | Интервальный литологический журнал |
 | `borehole_assays.csv` | Результаты опробования и лабораторных анализов |
 | `downhole_properties.csv` | Плотность и пористость по точкам или интервалам |
+| `downhole_gamma.csv` | Фрагмент журнала скважинного гамма-каротажа в имп/с с погрешностями |
 | `structural_observations.csv` | Наблюдения контактов, трещин, разломов и слоистости |
 | `surface_geochemistry.geojson` | Точечные результаты поверхностного геохимического опробования |
 | `terrain_observations.csv` | Точки съёмки высот, уклоны и типы рельефа |
@@ -29,7 +30,7 @@
 
 ## Источники вертикального и наклонного бурения
 
-Для раздельной подачи данных используйте каталоги `sources/vertical_boreholes/` и `sources/inclined_boreholes/`. В каждом находятся `observations.json` и таблицы `borehole_collars`, `borehole_lithology`, `borehole_assays`, `downhole_properties`, `structural_observations`, `fault_intersections` в CSV. Корневые CSV сохраняются как общий совместимый шаблон.
+Для раздельной подачи данных используйте каталоги `sources/vertical_boreholes/` и `sources/inclined_boreholes/`. В каждом находятся `observations.json` и таблицы `borehole_collars`, `borehole_lithology`, `borehole_assays`, `downhole_properties`, `structural_observations`, `fault_intersections`, `downhole_gamma` в CSV. Корневые CSV сохраняются как общий совместимый шаблон.
 
 У каждого источника собственный `source_id` и список `hole_ids`. В вертикальном источнике все `dip_deg = -90`, в наклонном — `-90 < dip_deg < 0`. Пример наклонной скважины имеет угол -60° и азимут 90°. Идентификаторы примеров различаются: `EXAMPLE-V-*` и `EXAMPLE-I-*`. Схемы полей одинаковы, поэтому наблюдения из двух источников можно привести к общей модели без потери ориентации.
 
@@ -59,6 +60,7 @@
 - `interval_id`, `measurement_id`, `observation_id` и `sample_id` являются локальными идентификаторами наблюдений, а не идентификаторами объектов из ground truth карты.
 - Один `sample_id` может повторяться для разных аналитов. При этом `hole_id`, `from_m` и `to_m` должны совпадать.
 - В `downhole_properties.csv` заполняется либо точечная глубина `depth_m`, либо пара `from_m` и `to_m`, но не оба варианта одновременно.
+- В `downhole_gamma.csv` интервал задаётся полями `from_m` и `to_m` вдоль ствола, а `depth_m` обозначает его середину. Запись связана со скважиной через `hole_id`, имеет собственный `measurement_id` и содержит скорость счёта, стандартное отклонение и время счёта.
 - Для поверхностного структурного наблюдения обязательны `x_m` и `y_m`. Для скважинного наблюдения обязательны существующий `hole_id` и `depth_m`.
 - В GeoJSON одна физическая проба повторяется отдельным объектом `Feature` для каждого аналита. Для одинакового `sample_id` должны совпадать геометрия, дата, материал, метод и интервал глубины; уникальна комбинация `campaign_id + sample_id + analyte`.
 - `trench_id` на листах `Intervals` и `Samples` должен существовать на листе `Trenches`. Пикетаж задаётся полями `from_m` и `to_m` вдоль оси траншеи и не может выходить за `surveyed_length_m`.

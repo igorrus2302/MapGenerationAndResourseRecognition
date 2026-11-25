@@ -114,9 +114,25 @@ def _depths(interval, elevation):
 def _ore_sources(cell, deposits, mineral_sources):
     for interval in cell.get("mineralization", ()):
         deposit = deposits[interval["deposit_id"]]
-        source = mineral_sources.get(deposit["mineral_id"])
+        source = mineral_sources.get(deposit.get("mineral_id"))
         if source:
             yield interval, deposit, source
+
+
+def _ore_gamma_response(ore, deposit, ore_source, rock_source, model):
+    if "uranium_equilibrium_factor" in ore_source and ore.get("grade_unit") == "% U₃O₈":
+        uranium = ore["average_grade"] * U_PPM_PER_PERCENT_U3O8 * ore_source["uranium_equilibrium_factor"]
+        return max(0, uranium - rock_source.get("uranium_ppm", 0)) * model["gamma_sensitivity_u_cps_per_ppm"]
+    fraction = min(1, ore["average_grade"] / deposit["max_grade"])
+    return _radioelement_response(ore_source, model) * fraction
+
+
+def local_gamma_response(part, model, rock_sources, deposits, mineral_sources):
+    """Synthetic response of the surrounding material in the existing survey scale."""
+    source = rock_sources.get(part["rock_id"], {})
+    return (model["gamma_background_cps"] + _radioelement_response(source, model)
+            + sum(_ore_gamma_response(ore, deposit, ore_source, source, model)
+                  for ore, deposit, ore_source in _ore_sources(part, deposits, mineral_sources)))
 
 
 def _legacy_response(cell, model, rock_sources, ores):
@@ -168,12 +184,7 @@ def _ground_response(cell, model, rock_sources, ores, soil_id, magnetic_scale):
             start, end = max(top, ore_top), min(bottom, ore_bottom)
             if end <= start:
                 continue
-            fraction = min(1, ore["average_grade"] / deposit["max_grade"])
-            if "uranium_equilibrium_factor" in ore_source and ore.get("grade_unit") == "% U₃O₈":
-                uranium = ore["average_grade"] * U_PPM_PER_PERCENT_U3O8 * ore_source["uranium_equilibrium_factor"]
-                gamma_source = max(0, uranium - source.get("uranium_ppm", 0)) * model["gamma_sensitivity_u_cps_per_ppm"]
-            else:
-                gamma_source = _radioelement_response(ore_source, model) * fraction
+            gamma_source = _ore_gamma_response(ore, deposit, ore_source, source, model)
             tau_start = optical_depth + attenuation * (start - top)
             tau_end = optical_depth + attenuation * (end - top)
             radiation += gamma_source * (math.exp(-tau_start) - math.exp(-tau_end))
@@ -234,6 +245,7 @@ def add_geophysical_fields(truth: dict[str, Any], settings: dict[str, Any], rock
     truth["geophysics"] = {
         "model": name,
         "parameters": model,
+        "mineral_sources": {key: dict(source) for key, source in mineral_sources.items() if source},
         "ranges": {field: [min(cell["geophysical_fields"][field] for cell in cells),
                            max(cell["geophysical_fields"][field] for cell in cells)] for field, _ in CHANNELS.values()},
     }

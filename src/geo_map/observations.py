@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .boreholes import collar_bounds, orientation, validate_trajectory
+from .downhole_gamma import DEFAULT_SETTINGS as GAMMA_LOG_DEFAULTS, DownholeGammaLogger, TABLE_FIELDS as GAMMA_LOG_FIELDS, validate_gamma_logging
 from .drilling_plan import DEFAULT_RANDOM_FRACTION, target_boreholes
 from .geophysical_observations import GEOPHYSICAL_DIRECTORIES, GEOPHYSICAL_TABLES, LEGACY_GEOPHYSICAL_TABLE, split_legacy_geophysical_bundle
 from .observation_tools import TruthSampler, _number, _rng, measure_grade
@@ -25,6 +26,7 @@ TABLE_FIELDS = {
     "borehole_lithology": "campaign_id hole_id interval_id from_m to_m observed_rock_id observed_rock_name description weathering alteration confidence observer logged_date".split(),
     "borehole_assays": "campaign_id sample_id hole_id from_m to_m analyte result_value result_qualifier unit detection_limit analysis_method laboratory certificate_id qc_type qc_flag".split(),
     "downhole_properties": "campaign_id hole_id measurement_id from_m to_m depth_m density_g_cm3 porosity_percent measurement_method density_error_g_cm3 porosity_error_percent qc_flag".split(),
+    "downhole_gamma": GAMMA_LOG_FIELDS,
     "structural_observations": "campaign_id observation_id hole_id x_m y_m depth_m feature_type strike_deg dip_deg dip_direction_deg offset_estimate_m confidence observation_method notes".split(),
 }
 TABLE_FIELDS.update(EXTRA_TABLE_FIELDS)
@@ -84,6 +86,7 @@ def _validate_config(config: dict[str, Any], dimensions: dict[str, Any]) -> None
         if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 10000:
             raise ValueError("drilling.hole_count: требуется целое число от 1 до 10000")
     holes = _plan_holes(dimensions, drilling, seed=0)
+    validate_gamma_logging(config, holes)
     planned_samples = sum(math.ceil(hole["depth_m"] / sample_length) for hole in holes)
     noise = config.get("noise", {})
     for key in ("position_sigma_m", "boundary_sigma_m", "density_sigma_g_cm3", "porosity_sigma_percent", "assay_relative_sigma", "assay_detection_limit_sigma_fraction"):
@@ -142,7 +145,8 @@ def _plan_holes(dimensions: dict[str, Any], drilling: dict[str, Any], seed: int,
     return holes
 
 
-def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], seed: int | None = None) -> dict[str, Any]:
+def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], seed: int | None = None, *,
+                          mineral_catalog: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return measured data only; latent sample values never leave this function."""
     config = deepcopy(config)
     dimensions = truth_map["dimensions"]
@@ -172,6 +176,8 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
     drilling = config["drilling"]
     geophysical_channels = {method: tables[table] for method, table in GEOPHYSICAL_TABLES.items()}
     holes = _plan_holes(dimensions, drilling, seed, geophysical_channels=geophysical_channels)
+    gamma_enabled = config.get("downhole_gamma", {}).get("enabled", False)
+    gamma_logger = DownholeGammaLogger(truth_map, config, seed, mineral_catalog) if gamma_enabled else None
     step = drilling["sample_length_m"]
     for hole in holes:
         hole_id, x, y, depth = hole["hole_id"], hole["x_m"], hole["y_m"], hole["depth_m"]
@@ -184,7 +190,10 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
                coordinate_system="local_cartesian", position_uncertainty_m=sigma("position_sigma_m"),
                drilling_method="synthetic_core", start_date=logged_date, end_date=logged_date, hole_status="completed")
         lithology = []
-        for part in sampler.borehole_segments(hole, 0, depth):
+        parts = sampler.borehole_segments(hole, 0, depth)
+        if gamma_logger:
+            gamma_logger.log(hole, parts, append)
+        for part in parts:
             if lithology and lithology[-1]["rock_id"] == part["rock_id"]:
                 lithology[-1]["to_m"] = part["to_m"]
             else:
@@ -246,9 +255,13 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
                        qc_type="primary", qc_flag="not_checked")
 
     extra = extend_campaign(truth_map, config, seed, holes, source_samples, tables, append)
+    extra["methods"]["downhole_gamma"] = {"enabled": gamma_enabled}
+    if gamma_enabled:
+        extra["methods"]["downhole_gamma"].update(
+            {key: config["downhole_gamma"].get(key, value) for key, value in GAMMA_LOG_DEFAULTS.items()})
     observed_ids = {item["observed_rock_id"] for name in ("borehole_lithology", "trench_intervals", "outcrop_observations") for item in tables[name]}
     bundle = {
-        "schema_version": "1.7", "data_kind": "exploration_observations",
+        "schema_version": "1.8", "data_kind": "exploration_observations",
         "campaign": {"campaign_id": campaign_id, "title": config["title"], "date": logged_date,
                      "coordinate_system": "local_cartesian", "width_m": dimensions["width_m"], "height_m": dimensions["height_m"]},
         "plan": {"layout": config["drilling"].get("layout", "grid"), "sample_length_m": step,
@@ -260,6 +273,7 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
                     "sample_count": sample_count, "missing_sample_count": planned_samples - sample_count,
                     "assay_count": len(tables["borehole_assays"]), "lithology_count": len(tables["borehole_lithology"]),
                     "property_count": len(tables["downhole_properties"]),
+                    "gamma_log_count": len(tables["downhole_gamma"]),
                     "contact_count": sum(row["feature_type"] == "contact" for row in tables["structural_observations"]),
                     "total_missing_sample_count": planned_samples - sample_count + extra["summary"]["trench_missing_sample_count"] + extra["summary"]["surface_unavailable_count"],
                     **extra["summary"]},
@@ -270,6 +284,7 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
             "Отметка устья и отметки обнажений заданы относительно общего нулевого уровня. Глубины почвенных и траншейных проб отсчитываются от местной поверхности.",
             "В скважинных и траншейных пробах содержание постоянно внутри сохранённого интервала минерализации; вне таких интервалов принято нулевым. Для почвенной геохимии используется отдельная условная модель фона и переноса.",
             "Шаг опробования не повышает пространственное разрешение исходной модели.",
+            "Гамма-каротаж моделирует локальный отклик пород вдоль ствола. Это условный измерительный канал, независимый от отбора проб.",
             "Результат с квалификатором lt означает содержание ниже указанного предела обнаружения, а не измеренный ноль.",
             "Ориентация разлома записывается только при ориентированном керне; ориентация контактов и смещение не определяются.",
             "Фон и перенос поверхностной геохимии — условная синтетическая модель. Алмазы, уголь и составные показатели для почв не поддерживаются.",

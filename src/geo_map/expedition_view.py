@@ -31,6 +31,8 @@ WORKSPACE_STYLES = r'''
     .profile-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
     .profile-heading select { width: auto; max-width: 180px; }
     .hole-profile { height: 280px; width: 100%; display: block; }
+    .gamma-profile { height: 320px; width: 100%; display: block; }
+    .gamma-profile-panel { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); }
     .hole-trajectory { height: 190px; width: 100%; display: block; margin-top: 16px; }
     .profile-key { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 8px; }
     .profile-key span { display: inline-flex; align-items: center; gap: 5px; }
@@ -132,6 +134,11 @@ WORKSPACE_PANELS = r'''
           <div class="profile-heading"><div><h3 id="holeProfileTitle"></h3><div id="holeProfileCaption" class="muted"></div></div><select id="profileAnalyte" aria-label="Компонент на графике содержания"></select></div>
           <svg id="holeProfile" class="hole-profile" viewBox="0 0 700 300" role="img" aria-label="Литологический журнал и анализы выбранной скважины"></svg>
           <div class="profile-key" id="profileKey"></div>
+          <div id="gammaProfilePanel" class="gamma-profile-panel hidden">
+            <h3>Гамма-каротаж</h3>
+            <div class="muted" id="gammaProfileCaption"></div>
+            <svg id="gammaProfile" class="gamma-profile" viewBox="0 0 700 300" role="img" aria-label="Гамма-сигнал вдоль ствола"></svg>
+          </div>
           <svg id="holeTrajectory" class="hole-trajectory" viewBox="0 0 700 200" role="img" aria-label="Траектория выбранной скважины в вертикальной плоскости"></svg>
           <div class="muted" id="holeTrajectoryCaption"></div>
         </div>
@@ -219,7 +226,7 @@ WORKSPACE_SCRIPT = r'''
       const element = id => document.getElementById(id);
       const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character]));
       const number = value => Number(value).toLocaleString('ru-RU', {maximumFractionDigits: 8});
-      const tableNames = {borehole_collars: 'Скважины', borehole_lithology: 'Литология', borehole_assays: 'Анализы проб', downhole_properties: 'Физические свойства', structural_observations: 'Контакты и разломы', fault_intersections: 'Интервалы нарушений', surface_geochemistry: 'Почвенные пробы', trenches: 'Положение траншей', trench_intervals: 'Описание дна', trench_samples: 'Канавные пробы', quality_control: 'Контрольные пробы'};
+      const tableNames = {borehole_collars: 'Скважины', borehole_lithology: 'Литология', borehole_assays: 'Анализы проб', downhole_properties: 'Физические свойства', downhole_gamma: 'Гамма-каротаж', structural_observations: 'Контакты и разломы', fault_intersections: 'Интервалы нарушений', surface_geochemistry: 'Почвенные пробы', trenches: 'Положение траншей', trench_intervals: 'Описание дна', trench_samples: 'Канавные пробы', quality_control: 'Контрольные пробы'};
       const fieldNames = {
         campaign_id: 'Экспедиция', hole_id: 'Скважина', x_m: 'X, м', y_m: 'Y, м', collar_elevation_m: 'Отметка устья, м',
         total_depth_m: 'Длина ствола, м', azimuth_deg: 'Азимут, °', dip_deg: 'Угол от горизонтали, °', coordinate_system: 'Система координат',
@@ -230,9 +237,10 @@ WORKSPACE_SCRIPT = r'''
         analysis_method: 'Метод анализа', laboratory: 'Лаборатория', certificate_id: 'Сертификат', qc_type: 'Тип пробы', qc_flag: 'Контроль качества',
         measurement_id: 'Измерение', depth_m: 'Вдоль ствола, м', density_g_cm3: 'Плотность, г/см³', porosity_percent: 'Пористость, %', measurement_method: 'Метод измерения',
         density_error_g_cm3: 'Погрешность плотности', porosity_error_percent: 'Погрешность пористости', observation_id: 'Наблюдение', feature_type: 'Тип структуры',
-        strike_deg: 'Простирание, °', dip_direction_deg: 'Направление падения, °', offset_estimate_m: 'Оценка смещения, м', observation_method: 'Метод наблюдения', notes: 'Примечания'
+        strike_deg: 'Простирание, °', dip_direction_deg: 'Направление падения, °', offset_estimate_m: 'Оценка смещения, м', observation_method: 'Метод наблюдения', notes: 'Примечания', counting_time_s: 'Время счёта, с'
       };
       const categoryNames = {completed: 'Завершена', medium: 'Средняя', high: 'Высокая', low: 'Низкая', contact: 'Контакт', primary: 'Первичная', not_checked: 'Не проверено', core_logging: 'Описание керна', synthetic_core: 'Синтетическое бурение', synthetic_core_measurement: 'Синтетическое измерение', synthetic_assay: 'Синтетический анализ', local_cartesian: 'Локальная, м', lt: 'Ниже предела'};
+      categoryNames.synthetic_gamma_logging = 'Синтетический гамма-каротаж';
       const pageSize = 50;
       const terrainTypes = {
         hill: {label: 'Возвышенность', color: '#ad542c'}, depression: {label: 'Понижение', color: '#226caa'},
@@ -414,6 +422,7 @@ WORKSPACE_SCRIPT = r'''
           ? `Минерализованных интервалов — ${number(searchSummary.mineralized_intervals)} · почвенных аномалий — ${number(searchSummary.soil_anomalies)}`
           : 'Ни один результат не прошёл поисковые пороги. Участок обследован по отдельным траекториям и точкам отбора проб.';
         if (searchSummary.geophysical_anomaly_count) element('recognitionSummary').textContent += ` · Геофизических аномалий — ${number(searchSummary.geophysical_anomaly_count)}`;
+        if (searchSummary.downhole_gamma_anomaly_count) element('recognitionSummary').textContent += ` · Гамма-аномалий в скважинах — ${number(searchSummary.downhole_gamma_anomaly_count)}`;
         const analyte = element('recognitionAnalyte');
         analyte.innerHTML = '<option value="">Все компоненты</option>' + [...new Set(targets.map(target => target.analyte))].sort()
           .map(name => `<option value="${escape(name)}">${escape(name)}</option>`).join('');
@@ -422,7 +431,8 @@ WORKSPACE_SCRIPT = r'''
           observed_contact: 'Контакт пород', intrusive_rock: 'Порода интрузии', compatible_core_properties: 'Плотность и пористость согласуются',
           adjacent_positive_samples: 'Смежные пробы', nearby_soil_anomaly: 'Аномалия рядом',
           terrain_bauxite_depression: 'Понижение над карбонатным контактом', terrain_exposed_host: 'Рядом выход подходящей породы',
-          geophysics_magnetic: 'Магнитное подтверждение', geophysics_gamma: 'Гамма-аномалия у поверхности'
+          geophysics_magnetic: 'Магнитное подтверждение', geophysics_gamma: 'Гамма-аномалия у поверхности',
+          downhole_gamma_anomaly: 'Аномалия гамма-каротажа'
         };
         function renderTargets() {
           const shown = targets.filter(target => !analyte.value || target.analyte === analyte.value);
@@ -441,7 +451,9 @@ WORKSPACE_SCRIPT = r'''
             const outcrop = context?.outcrop ? `<div class="muted">Обнажение · ${escape(context.outcrop.observation_id)} · ${number(context.outcrop.distance_xy_m)} м</div>` : '';
             const field = target.geophysical_evidence;
             const geophysics = field ? `<div class="muted">Геофизика · ${escape(field.observation_id)} · ${number(field.distance_xy_m)} м</div>` : '';
-            return `<tr><td>${escape(target.site_id)} · ${escape(target.analyte)}</td><td>${depths}</td><td>${number(target.peak_result)} / ${number(target.threshold)} ${escape(target.unit)}</td><td>${signals.join(', ') || '—'}${terrain}${outcrop}${geophysics}</td></tr>`;
+            const gamma = target.downhole_gamma_evidence;
+            const gammaEvidence = gamma ? `<div class="muted">Каротаж · ${number(gamma.peak_measured_cps)} имп/с · фон ${number(gamma.background_cps)} имп/с</div>` : '';
+            return `<tr><td>${escape(target.site_id)} · ${escape(target.analyte)}</td><td>${depths}</td><td>${number(target.peak_result)} / ${number(target.threshold)} ${escape(target.unit)}</td><td>${signals.join(', ') || '—'}${terrain}${outcrop}${geophysics}${gammaEvidence}</td></tr>`;
           }).join('') || '<tr><td colspan="4">Нет целей по выбранным наблюдениям</td></tr>';
         }
         analyte.addEventListener('change', renderTargets);
@@ -463,8 +475,41 @@ WORKSPACE_SCRIPT = r'''
       element('surveyMap').addEventListener('click', event => { const dot = event.target.closest('[data-hole]'); if (dot) selectHole(dot.dataset.hole); });
       element('surveyMap').addEventListener('keydown', event => { if (!['Enter', ' '].includes(event.key)) return; const dot = event.target.closest('[data-hole]'); if (dot) { event.preventDefault(); const id = dot.dataset.hole; selectHole(id); [...element('surveyMap').querySelectorAll('[data-hole]')].find(item => item.dataset.hole === id)?.focus(); } });
 
+      function drawGammaProfile(hole) {
+        const rows = (tables.downhole_gamma || []).filter(row => row.hole_id === hole?.hole_id)
+          .sort((a, b) => a.from_m - b.from_m);
+        element('gammaProfilePanel').classList.toggle('hidden', !rows.length);
+        if (!rows.length) {
+          element('gammaProfile').innerHTML = '';
+          element('gammaProfileCaption').textContent = '';
+          return;
+        }
+        const peak = rows.reduce((maximum, row) => Math.max(maximum, row.gamma_count_rate_cps), 0);
+        const maximum = Math.max(1, peak);
+        const left = 105, width = 540, top = 36, height = 230;
+        const x = value => left + value / maximum * width;
+        const y = depth => top + depth / hole.total_depth_m * height;
+        let markup = '<text x="12" y="18" font-size="11" fill="#486581">Вдоль ствола</text><text x="105" y="18" font-size="12" fill="#486581">Гамма-сигнал, имп/с</text>';
+        for (let i = 0; i <= 5; i++) {
+          const depth = hole.total_depth_m * i / 5, value = maximum * i / 5;
+          markup += `<path d="M ${left} ${y(depth)} H ${left + width} M ${x(value)} ${top} V ${top + height}" stroke="#e8edf2"/><text x="94" y="${y(depth) + 4}" text-anchor="end" font-size="11" fill="#627d98">${number(depth)} м</text><text x="${x(value)}" y="286" text-anchor="middle" font-size="10" fill="#627d98">${number(Number(value.toFixed(1)))}</text>`;
+        }
+        let previous;
+        for (const row of rows) {
+          const rate = x(row.gamma_count_rate_cps), start = y(row.from_m), end = y(row.to_m);
+          if (previous && Math.abs(previous.to_m - row.from_m) < 1e-6) {
+            markup += `<path d="M ${x(previous.gamma_count_rate_cps)} ${start} H ${rate}" stroke="#9354b5" stroke-width="1.5"/>`;
+          }
+          markup += `<path data-gamma-measurement="${escape(row.measurement_id)}" d="M ${rate} ${start} V ${end}" stroke="#9354b5" stroke-width="2.5"><title>${escape(row.measurement_id)} · ${number(row.from_m)}–${number(row.to_m)} м · ${number(row.gamma_count_rate_cps)} имп/с ± ${number(row.gamma_sigma_cps)}</title></path>`;
+          previous = row;
+        }
+        element('gammaProfile').innerHTML = markup;
+        element('gammaProfileCaption').textContent = `${number(rows.length)} измерений · максимум ${number(peak)} имп/с`;
+      }
+
       function drawProfile() {
         const hole = holes.find(item => item.hole_id === selectedHole);
+        drawGammaProfile(hole);
         if (!hole) {
           element('holeProfileTitle').textContent = 'В этом источнике нет скважин';
           for (const id of ['holeProfileCaption', 'holeTrajectoryCaption']) element(id).textContent = '';

@@ -8,7 +8,7 @@ from typing import Any
 
 BOREHOLE_SOURCE_TABLES = (
     "borehole_collars", "borehole_lithology", "borehole_assays", "downhole_properties",
-    "structural_observations", "fault_intersections",
+    "structural_observations", "fault_intersections", "downhole_gamma",
 )
 BOREHOLE_SOURCE_KINDS = {
     "vertical_boreholes": "Вертикальное бурение",
@@ -23,22 +23,24 @@ def borehole_source_kind(collar: dict[str, Any]) -> str:
 def describe_borehole_sources(bundle: dict[str, Any]) -> list[dict[str, Any]]:
     """Describe disjoint sources without duplicating their records in the bundle."""
     sources = []
+    table_names = [name for name in BOREHOLE_SOURCE_TABLES if name in bundle["table_fields"]]
     for kind, title in BOREHOLE_SOURCE_KINDS.items():
         holes = [row for row in bundle["tables"]["borehole_collars"] if borehole_source_kind(row) == kind]
         ids = {row["hole_id"] for row in holes}
         tables = {name: [row for row in bundle["tables"].get(name, []) if row["hole_id"] in ids]
-                  for name in BOREHOLE_SOURCE_TABLES}
+                  for name in table_names}
         sources.append({
             "source_id": f"{bundle['campaign']['campaign_id']}:{kind}",
             "kind": kind, "title": title, "directory": f"sources/{kind}",
             "hole_ids": [row["hole_id"] for row in holes],
-            "table_names": list(BOREHOLE_SOURCE_TABLES),
+            "table_names": table_names,
             "summary": {
                 "hole_count": len(holes), "drilled_m": round(sum(row["total_depth_m"] for row in holes), 6),
                 "sample_count": len({row["sample_id"] for row in tables["borehole_assays"]}),
                 "assay_count": len(tables["borehole_assays"]),
                 "lithology_count": len(tables["borehole_lithology"]),
                 "property_count": len(tables["downhole_properties"]),
+                "gamma_log_count": len(tables.get("downhole_gamma", ())),
                 "contact_count": sum(row["feature_type"] == "contact" for row in tables["structural_observations"]),
                 "fault_observation_count": len(tables["fault_intersections"]),
             },

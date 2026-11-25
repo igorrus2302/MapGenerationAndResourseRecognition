@@ -76,6 +76,7 @@ METHODS_SCRIPT = r'''
         structures: {label: 'Структуры', panel: 'structureOverview', tables: ['structural_observations', 'fault_intersections']},
         quality: {label: 'Контроль качества', panel: 'qualityOverview', tables: ['quality_control']}
       };
+      if (observations.table_fields.downhole_gamma) sections.boreholes.tables.push('downhole_gamma');
       const sectionButtons = addMethodButtons(sections, 'expeditionSections', activateSection);
       let activeSection = 'boreholes';
       const trenches = tables.trenches || [];
