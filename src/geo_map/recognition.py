@@ -13,6 +13,7 @@ from tempfile import NamedTemporaryFile
 from typing import Any
 
 from .boreholes import point as borehole_point
+from .reconstruction import reconstruct_map
 from .recognition_geophysics import GEOPHYSICAL_SIGNALS, DownholeGammaEvidence, GeophysicalEvidence
 from .recognition_terrain import SHALLOW_DEPTH_M, TERRAIN_SIGNALS, TerrainEvidence
 
@@ -366,7 +367,8 @@ def recognize_deposits(observations: dict[str, Any], mineral_catalog: dict[str, 
     for index, target in enumerate(targets, 1):
         target["target_id"] = f"TARGET-{index:04d}"
     return {
-        "data_kind": "exploration_recognition", "schema_version": "1.3", "campaign": campaign,
+        "data_kind": "exploration_recognition", "schema_version": "1.4", "campaign": campaign,
+        "reconstructed_map": reconstruct_map(observations, targets, mineral_catalog, rock_catalog=rock_catalog),
         "vertical_reference": "depth_positive_down_from_surface", "targets": targets,
         "summary": {"mineralized_intervals": len(targets) - len(soil), "soil_anomalies": len(soil),
                     "targets_with_terrain_context": sum("terrain_context" in item for item in targets),

@@ -334,6 +334,7 @@ if (!observations) {
   assert.equal(get('downloadObservationCsv').textContent, 'CSV всей таблицы');
   const recognition = vm.runInContext('RECOGNITION_DATA', context);
   const recognitionDownload = blobs.length;
+  let reconstructedDownload = null;
   get('tab-recognized').click();
   assert.equal(get('recognitionEmpty').classList.contains('hidden'), Boolean(recognition));
   if (recognition) {
@@ -352,6 +353,64 @@ if (!observations) {
       assert.match(get('recognitionTargets').innerHTML, /Нет целей/);
     }
     get('downloadRecognition').click();
+    const model = recognition.reconstructed_map;
+    if (model) {
+      assert.equal(get('reconstructedModel').classList.contains('hidden'), false);
+      assert.ok(get('reconstructionSvg').innerHTML.includes('data-voxel='));
+      for (const mode of ['xz', 'yz', 'terrain', 'magnetic', 'gamma', '3d', 'xy']) {
+        get('reconstructionMode').value = mode;
+        get('reconstructionMode').fire('change');
+        assert.ok(!get('reconstructionSvg').innerHTML.includes('NaN'), mode);
+        assert.ok(get('reconstructionSvg').innerHTML.includes(mode === '3d' ? '<polygon' : '<rect'), mode);
+      }
+      get('reconstructionSlice').value = '0';
+      get('reconstructionSlice').fire('input');
+      get('reconstructionLayer').value = 'support';
+      get('reconstructionLayer').fire('change');
+      assert.match(get('reconstructionLegend').innerHTML, /Интерполяция/);
+      get('openMineralResults').click();
+      assert.equal(location.hash, '#minerals');
+      assert.equal(get('mineralsContent').classList.contains('hidden'), false);
+      if (model.mineral_zones.length) {
+        const zone = model.mineral_zones[0];
+        assert.ok(get('mineralZoneList').innerHTML.includes(zone.zone_id));
+        if (zone.resources) {
+          assert.match(get('mineralZoneList').innerHTML, /Оценочный объём:/);
+          assert.match(get('mineralZoneList').innerHTML, /Масса минерализованной породы:/);
+          assert.match(get('mineralZoneList').innerHTML, /Масса компонента:/);
+        }
+        const depositRows = get('mineralDepositEstimates').innerHTML;
+        assert.equal((depositRows.match(/data-mineral-estimate=/g) || []).length, model.summary.mineral_types);
+        for (const estimate of model.mineral_deposit_estimates || []) {
+          const expectedCount = model.mineral_zones.filter(z => z.mineral_id === estimate.mineral_id).length;
+          assert.equal(estimate.estimated_deposit_count, expectedCount);
+          assert.ok(depositRows.includes('data-mineral-estimate="' + estimate.mineral_id + '"'));
+          assert.ok(depositRows.includes('class="deposit-count">' + expectedCount.toLocaleString('ru-RU') + '</td>'));
+          if (estimate.resources) {
+            const q = value => value == null ? 'н/д' : value.toLocaleString('ru-RU', {maximumFractionDigits: 2});
+            assert.ok(depositRows.includes('data-resource-volume>' + q(estimate.resources.volume_m3) + '</td>'));
+            assert.ok(depositRows.includes('data-resource-ore-mass>' + q(estimate.resources.ore_mass_t) + '</td>'));
+            assert.match(depositRows, /data-resource-component-mass>/);
+          }
+        }
+        get('mineralDepositEstimates').fire('click', {
+          target: {closest: selector => selector === '[data-deposit-mineral]' ? {dataset: {depositMineral: zone.mineral_id}} : null},
+        });
+        assert.equal(get('mineralResultsFilter').value, zone.mineral_id);
+        assert.equal((get('mineralZoneList').innerHTML.match(/class="zone-card"/g) || []).length, model.mineral_zones.filter(z => z.mineral_id === zone.mineral_id).length);
+        clickMapPoint('mineralZoneList', 'zone', zone.zone_id);
+        assert.equal(location.hash, '#recognized');
+        assert.equal(get('reconstructionMineral').value, zone.mineral_id);
+        assert.ok(get('reconstructionCellInfo').innerHTML.includes(zone.zone_id));
+      } else {
+        assert.match(get('mineralZoneList').innerHTML, /Нет выделенных зон/);
+        assert.match(get('mineralDepositEstimates').innerHTML, /Залежи по имеющимся наблюдениям не выделены/);
+        get('backToReconstruction').click();
+      }
+      assert.equal(location.hash, '#recognized');
+      reconstructedDownload = blobs.length;
+      get('downloadReconstructedMap').click();
+    }
   }
   const fieldTable = get('observationTableHead').innerHTML;
   get('tab-preliminary').click();
@@ -432,6 +491,7 @@ if (!observations) {
     assert.equal(JSON.parse(surfaceJson).features.length, observations.tables.surface_geochemistry.length);
     assert.equal(JSON.parse(trenchJson).features.length, observations.tables.trenches.length);
     if (recognition) assert.equal(values[recognitionDownload], JSON.stringify(recognition, null, 2));
+    if (reconstructedDownload !== null) assert.equal(values[reconstructedDownload], JSON.stringify(recognition.reconstructed_map, null, 2));
     for (const [enabled, index, table] of [
       [hasOutcrops, outcropDownload, 'outcrop_observations'],
       [hasTerrainSurvey, terrainDownload, 'terrain_observations'],

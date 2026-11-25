@@ -105,6 +105,7 @@ def main() -> None:
     map_path = save_map(data, args.output / "map.json")
     observation_path = save_observations(observations, args.output / "observations")
     recognition_path = save_recognition(recognition, args.output / "recognition.json")
+    reconstruction_path = save_recognition(recognition["reconstructed_map"], args.output / "reconstructed_map.json")
     internal_directory = args.output / "internal"
     internal_directory.mkdir(parents=True, exist_ok=True)
     (internal_directory / "expedition_run.json").write_text(
@@ -148,6 +149,8 @@ def main() -> None:
     print(f"Геофизических аномалий: {recognition['summary']['geophysical_anomaly_count']}")
     print(f"Целей с поддержкой геофизики: {recognition['summary']['targets_supported_by_geophysics']}")
     print(f"Результат поиска: {recognition_path}")
+    print(f"Реконструированная карта: {reconstruction_path}")
+    print(f"Выделено пространственных рудных зон: {recognition['reconstructed_map']['summary']['mineral_zone_count']}")
     print(f"Просмотр: {viewer_path}")
 
 

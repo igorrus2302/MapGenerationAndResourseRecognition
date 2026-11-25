@@ -2,6 +2,7 @@
 
 from .expedition_methods_view import FIELD_METHODS_HTML, METHODS_SCRIPT, METHODS_STYLES, PRELIMINARY_METHODS_HTML
 from .preliminary_view import PRELIMINARY_SCRIPT
+from .reconstruction_view import RECONSTRUCTION_STYLES, RECONSTRUCTION_HTML, MINERALS_PANEL, RECONSTRUCTION_SCRIPT
 
 WORKSPACE_STYLES = r'''
     .workspace-tabs { height: 62px; display: flex; align-items: stretch; gap: 5px; padding: 8px 22px 0; background: white; border-bottom: 1px solid var(--line); }
@@ -92,7 +93,8 @@ WORKSPACE_TABS = r'''
     <button class="workspace-tab" id="tab-preliminary" role="tab" aria-controls="preliminaryPanel" aria-selected="false" tabindex="-1" data-workspace="preliminary"><span class="tab-number">02</span>Предварительные наблюдения</button>
     <button class="workspace-tab" id="tab-expedition" role="tab" aria-controls="expeditionPanel" aria-selected="false" tabindex="-1" data-workspace="expedition"><span class="tab-number">03</span>Разведочная экспедиция</button>
     <button class="workspace-tab" id="tab-recognized" role="tab" aria-controls="recognizedPanel" aria-selected="false" tabindex="-1" data-workspace="recognized"><span class="tab-number">04</span>Распознанная карта</button>
-    <button class="workspace-tab" id="tab-similarity" role="tab" aria-controls="similarityPanel" aria-selected="false" tabindex="-1" data-workspace="similarity"><span class="tab-number">05</span>Оценка сходства</button>
+    <button class="workspace-tab" id="tab-minerals" role="tab" aria-controls="mineralsPanel" aria-selected="false" tabindex="-1" data-workspace="minerals"><span class="tab-number">05</span>Найденные ископаемые</button>
+    <button class="workspace-tab" id="tab-similarity" role="tab" aria-controls="similarityPanel" aria-selected="false" tabindex="-1" data-workspace="similarity"><span class="tab-number">06</span>Оценка сходства</button>
   </nav>
 '''
 
@@ -175,6 +177,7 @@ WORKSPACE_PANELS = r'''
   <section id="recognizedPanel" class="workspace-page hidden" role="tabpanel" aria-labelledby="tab-recognized">
     <div class="empty-card" id="recognitionEmpty"><h2>Поиск по наблюдениям</h2><p>Результаты поиска ещё не загружены.</p></div>
     <div id="recognitionContent" class="hidden">
+      __RECONSTRUCTION_HTML__
       <div class="expedition-heading">
         <div><h2>Результаты поиска</h2><p id="recognitionSummary"></p></div>
         <button id="downloadRecognition" class="primary-button">Скачать результаты · JSON</button>
@@ -192,6 +195,7 @@ WORKSPACE_PANELS = r'''
       </div>
     </div>
   </section>
+  __MINERALS_PANEL__
   <section id="similarityPanel" class="workspace-page hidden" role="tabpanel" aria-labelledby="tab-similarity" tabindex="0">
     <div class="empty-card"><h2>Сравнение с истинной картой</h2><p>Оценка сходства пока недоступна.</p></div>
   </section>
@@ -200,13 +204,14 @@ WORKSPACE_PANELS = r'''
 WORKSPACE_SCRIPT = r'''
     (() => {
       const tabs = [...document.querySelectorAll('.workspace-tab')];
-      const panels = {truth: 'truthPanel', preliminary: 'preliminaryPanel', expedition: 'expeditionPanel', recognized: 'recognizedPanel', similarity: 'similarityPanel'};
+      const panels = {truth: 'truthPanel', preliminary: 'preliminaryPanel', expedition: 'expeditionPanel', recognized: 'recognizedPanel', minerals: 'mineralsPanel', similarity: 'similarityPanel'};
       const summary = OBSERVATION_DATA?.summary;
       const stats = {
         truth: document.getElementById('headerStats').innerHTML,
         preliminary: '<span>Съёмка до бурения</span>',
         expedition: summary ? `<span>${summary.hole_count} скважин</span><span>${summary.total_sample_count ?? summary.sample_count} полевых проб</span>` : '<span>Полевые наблюдения</span>',
-        recognized: '<span>Поиск по наблюдениям</span>',
+        recognized: '<span>Восстановленная модель</span>',
+        minerals: '<span>Рудные зоны и пробы</span>',
         similarity: '<span>Сравнение карт</span>'
       };
       function activate(name) {
@@ -410,8 +415,10 @@ WORKSPACE_SCRIPT = r'''
         const horizontal = hole.dip_deg === -90 ? 0 : distance * Math.cos(dip);
         return {x: hole.x_m + horizontal * Math.sin(azimuth), y: hole.y_m + horizontal * Math.cos(azimuth), depth: -distance * Math.sin(dip), horizontal};
       }
+      __RECONSTRUCTION_SCRIPT__
       function renderRecognition(result) {
         if (!result) return;
+        renderReconstruction(result);
         element('recognitionEmpty').classList.add('hidden');
         element('recognitionContent').classList.remove('hidden');
         const {targets, summary: searchSummary, campaign} = result;
@@ -641,3 +648,7 @@ WORKSPACE_STYLES += METHODS_STYLES
 WORKSPACE_PANELS = WORKSPACE_PANELS.replace('__PRELIMINARY_METHODS__', PRELIMINARY_METHODS_HTML).replace('__FIELD_METHODS__', FIELD_METHODS_HTML)
 WORKSPACE_SCRIPT = WORKSPACE_SCRIPT.replace('__METHODS_SCRIPT__', METHODS_SCRIPT)
 WORKSPACE_SCRIPT = WORKSPACE_SCRIPT.replace('__PRELIMINARY_SCRIPT__', PRELIMINARY_SCRIPT)
+
+WORKSPACE_STYLES += RECONSTRUCTION_STYLES
+WORKSPACE_PANELS = WORKSPACE_PANELS.replace("__RECONSTRUCTION_HTML__", RECONSTRUCTION_HTML).replace("__MINERALS_PANEL__", MINERALS_PANEL)
+WORKSPACE_SCRIPT = WORKSPACE_SCRIPT.replace("__RECONSTRUCTION_SCRIPT__", RECONSTRUCTION_SCRIPT)
