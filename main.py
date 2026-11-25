@@ -30,6 +30,11 @@ def parse_args() -> argparse.Namespace:
         help="Использовать существующий map.json для новой экспедиции",
     )
     parser.add_argument(
+        "--recompute-geophysics",
+        action="store_true",
+        help="Пересчитать геофизические поля сохранённой карты по текущим справочникам",
+    )
+    parser.add_argument(
         "--observations-config",
         type=Path,
         default=PROJECT_ROOT / "config/observations.json",
@@ -83,9 +88,10 @@ def main() -> None:
             raise ValueError("Ожидается истинная карта в формате 2.0, 2.1 или 2.2")
         mineral_catalog = json.loads(args.minerals.read_text(encoding="utf-8"))
         rock_catalog = json.loads(args.rocks.read_text(encoding="utf-8"))
-        if "geophysics" not in data:
+        if "geophysics" not in data or args.recompute_geophysics:
             settings = json.loads(args.config.read_text(encoding="utf-8")).get("geophysics", {})
-            add_geophysical_fields(data, settings, rock_catalog["rocks"], mineral_catalog["minerals"])
+            add_geophysical_fields(data, settings, rock_catalog["rocks"], mineral_catalog["minerals"],
+                                   replace=args.recompute_geophysics)
     else:
         config = load_config(args.config, args.rocks, args.minerals)
         data = generate_map(config, seed=args.seed)

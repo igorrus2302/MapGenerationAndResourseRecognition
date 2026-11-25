@@ -64,8 +64,9 @@
     "enabled": true,
     "point_count": 400,
     "position_sigma_m": 1.5,
-    "magnetic_sigma_nt": 4,
-    "gamma_sigma_cps": 2
+    "magnetic_sigma_nt": 1,
+    "gamma_sigma_cps": 0.2,
+    "gamma_counting_time_s": 60
   },
   "trenches": {
     "enabled": true,

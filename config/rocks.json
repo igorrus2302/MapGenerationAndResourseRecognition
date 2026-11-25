@@ -2,7 +2,7 @@
   "rocks": [
     {
       "id": "soil",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.0004, "gamma_response_cps": 16},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0004, "potassium_percent": 1.3, "uranium_ppm": 2.1, "thorium_ppm": 8.0},
       "name": "Почва",
       "category": "surface",
       "minecraft_analogue": "Dirt",
@@ -12,6 +12,7 @@
     },
     {
       "id": "stone",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.002, "potassium_percent": 2.4, "uranium_ppm": 3.3, "thorium_ppm": 16},
       "name": "Каменная порода",
       "category": "igneous",
       "minecraft_analogue": "Stone",
@@ -21,7 +22,7 @@
     },
     {
       "id": "granite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.002, "gamma_response_cps": 55},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.002, "potassium_percent": 2.4, "uranium_ppm": 3.3, "thorium_ppm": 16},
       "name": "Гранит",
       "category": "igneous",
       "minecraft_analogue": "Granite",
@@ -31,7 +32,7 @@
     },
     {
       "id": "diorite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.007, "gamma_response_cps": 22},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.007, "potassium_percent": 2.7, "uranium_ppm": 0.8, "thorium_ppm": 2.4},
       "name": "Диорит",
       "category": "igneous",
       "minecraft_analogue": "Diorite",
@@ -41,7 +42,7 @@
     },
     {
       "id": "andesite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.007, "gamma_response_cps": 20},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.007, "potassium_percent": 2.7, "uranium_ppm": 1.6, "thorium_ppm": 5},
       "name": "Андезит",
       "category": "igneous",
       "minecraft_analogue": "Andesite",
@@ -51,6 +52,7 @@
     },
     {
       "id": "deepslate",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.003, "potassium_percent": 2.6, "uranium_ppm": 2.6, "thorium_ppm": 19},
       "name": "Глубинный сланец",
       "category": "metamorphic",
       "minecraft_analogue": "Deepslate",
@@ -60,7 +62,7 @@
     },
     {
       "id": "tuff",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.002, "gamma_response_cps": 28},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.002, "potassium_percent": 2.6, "uranium_ppm": 2.4, "thorium_ppm": 12},
       "name": "Туф",
       "category": "volcanic",
       "minecraft_analogue": "Tuff",
@@ -70,6 +72,7 @@
     },
     {
       "id": "calcite",
+      "geophysical_source": {"magnetic_susceptibility_si": 1e-05, "potassium_percent": 0.1, "uranium_ppm": 0.7, "thorium_ppm": 0.5},
       "name": "Кальцитовая порода",
       "category": "carbonate",
       "minecraft_analogue": "Calcite",
@@ -79,6 +82,7 @@
     },
     {
       "id": "dripstone",
+      "geophysical_source": {"magnetic_susceptibility_si": 1e-05, "potassium_percent": 0.1, "uranium_ppm": 0.7, "thorium_ppm": 0.5},
       "name": "Натёчный известняк",
       "category": "carbonate",
       "minecraft_analogue": "Dripstone Block",
@@ -88,7 +92,7 @@
     },
     {
       "id": "limestone",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.0002, "gamma_response_cps": 6},
+      "geophysical_source": {"magnetic_susceptibility_si": 2e-05, "potassium_percent": 0.3, "uranium_ppm": 1.5, "thorium_ppm": 1.5},
       "name": "Известняк",
       "category": "sedimentary",
       "minecraft_analogue": "Calcite",
@@ -98,7 +102,7 @@
     },
     {
       "id": "sandstone",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.0007, "gamma_response_cps": 13},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.00015, "potassium_percent": 1.8, "uranium_ppm": 2.3, "thorium_ppm": 12},
       "name": "Песчаник",
       "category": "sedimentary",
       "minecraft_analogue": "Sandstone",
@@ -108,7 +112,7 @@
     },
     {
       "id": "red_sandstone",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.002, "gamma_response_cps": 15},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0007, "potassium_percent": 1.8, "uranium_ppm": 2.3, "thorium_ppm": 12},
       "name": "Красный песчаник",
       "category": "sedimentary",
       "minecraft_analogue": "Red Sandstone",
@@ -118,6 +122,7 @@
     },
     {
       "id": "clay",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.00025, "potassium_percent": 1.5, "uranium_ppm": 2.3, "thorium_ppm": 13},
       "name": "Глина",
       "category": "sedimentary",
       "minecraft_analogue": "Clay",
@@ -127,7 +132,7 @@
     },
     {
       "id": "basalt",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.016, "gamma_response_cps": 10},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.016, "potassium_percent": 0.9, "uranium_ppm": 0.7, "thorium_ppm": 3},
       "name": "Базальт",
       "category": "volcanic",
       "minecraft_analogue": "Basalt",
@@ -137,6 +142,7 @@
     },
     {
       "id": "blackstone",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.014, "potassium_percent": 0.9, "uranium_ppm": 0.7, "thorium_ppm": 3},
       "name": "Чёрный вулканит",
       "category": "volcanic",
       "minecraft_analogue": "Blackstone",
@@ -146,6 +152,7 @@
     },
     {
       "id": "obsidian",
+      "geophysical_source": {"magnetic_susceptibility_si": 0.001, "potassium_percent": 3.7, "uranium_ppm": 2.4, "thorium_ppm": 17},
       "name": "Обсидиан",
       "category": "volcanic_glass",
       "minecraft_analogue": "Obsidian",
@@ -155,7 +162,7 @@
     },
     {
       "id": "conglomerate",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.001, "gamma_response_cps": 13},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0006, "potassium_percent": 1.5, "uranium_ppm": 2.0, "thorium_ppm": 8},
       "name": "Конгломерат",
       "category": "sedimentary",
       "minecraft_analogue": "—",
@@ -165,7 +172,7 @@
     },
     {
       "id": "siltstone",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.0007, "gamma_response_cps": 20},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0003, "potassium_percent": 2.0, "uranium_ppm": 2.3, "thorium_ppm": 13},
       "name": "Алевролит",
       "category": "sedimentary",
       "minecraft_analogue": "—",
@@ -175,7 +182,7 @@
     },
     {
       "id": "claystone",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.0006, "gamma_response_cps": 24},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0003, "potassium_percent": 2.4, "uranium_ppm": 2.6, "thorium_ppm": 17},
       "name": "Аргиллит",
       "category": "sedimentary",
       "minecraft_analogue": "—",
@@ -185,7 +192,7 @@
     },
     {
       "id": "shale",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.0009, "gamma_response_cps": 25},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0003, "potassium_percent": 2.6, "uranium_ppm": 2.6, "thorium_ppm": 19},
       "name": "Глинистый сланец",
       "category": "sedimentary",
       "minecraft_analogue": "—",
@@ -195,7 +202,7 @@
     },
     {
       "id": "carbonaceous_shale",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.001, "gamma_response_cps": 30},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0005, "potassium_percent": 2.3, "uranium_ppm": 3.8, "thorium_ppm": 19},
       "name": "Углистый сланец",
       "category": "sedimentary",
       "minecraft_analogue": "Coal Ore",
@@ -205,7 +212,7 @@
     },
     {
       "id": "dolomite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.0002, "gamma_response_cps": 5},
+      "geophysical_source": {"magnetic_susceptibility_si": 2e-05, "potassium_percent": 0.2, "uranium_ppm": 1.2, "thorium_ppm": 1.2},
       "name": "Доломит",
       "category": "carbonate",
       "minecraft_analogue": "—",
@@ -215,7 +222,7 @@
     },
     {
       "id": "chert",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.0003, "gamma_response_cps": 7},
+      "geophysical_source": {"magnetic_susceptibility_si": 2e-05, "potassium_percent": 0.15, "uranium_ppm": 0.9, "thorium_ppm": 0.8},
       "name": "Кремнистая порода",
       "category": "sedimentary",
       "minecraft_analogue": "—",
@@ -225,7 +232,7 @@
     },
     {
       "id": "dacite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.004, "gamma_response_cps": 33},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.004, "potassium_percent": 2.7, "uranium_ppm": 2.0, "thorium_ppm": 10},
       "name": "Дацит",
       "category": "volcanic",
       "minecraft_analogue": "—",
@@ -235,7 +242,7 @@
     },
     {
       "id": "rhyolite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.002, "gamma_response_cps": 53},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.002, "potassium_percent": 3.7, "uranium_ppm": 2.4, "thorium_ppm": 17},
       "name": "Риолит",
       "category": "volcanic",
       "minecraft_analogue": "—",
@@ -245,7 +252,7 @@
     },
     {
       "id": "granodiorite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.004, "gamma_response_cps": 46},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.004, "potassium_percent": 2.4, "uranium_ppm": 3.3, "thorium_ppm": 16},
       "name": "Гранодиорит",
       "category": "igneous",
       "minecraft_analogue": "—",
@@ -255,7 +262,7 @@
     },
     {
       "id": "gabbro",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.022, "gamma_response_cps": 7},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.022, "potassium_percent": 0.4, "uranium_ppm": 0.3, "thorium_ppm": 1.2},
       "name": "Габбро",
       "category": "igneous",
       "minecraft_analogue": "—",
@@ -265,7 +272,7 @@
     },
     {
       "id": "peridotite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.018, "gamma_response_cps": 4},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.018, "potassium_percent": 0.2, "uranium_ppm": 0.2, "thorium_ppm": 0.7},
       "name": "Перидотит",
       "category": "ultramafic",
       "minecraft_analogue": "—",
@@ -275,7 +282,7 @@
     },
     {
       "id": "slate",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.003, "gamma_response_cps": 23},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.003, "potassium_percent": 2.6, "uranium_ppm": 2.6, "thorium_ppm": 19},
       "name": "Кристаллический сланец",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -285,7 +292,7 @@
     },
     {
       "id": "schist",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.005, "gamma_response_cps": 30},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.002, "potassium_percent": 2.2, "uranium_ppm": 2.3, "thorium_ppm": 12},
       "name": "Слюдяной сланец",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -295,7 +302,7 @@
     },
     {
       "id": "gneiss",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.006, "gamma_response_cps": 43},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.006, "potassium_percent": 2.4, "uranium_ppm": 2.5, "thorium_ppm": 15},
       "name": "Гнейс",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -305,7 +312,7 @@
     },
     {
       "id": "quartzite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.001, "gamma_response_cps": 7},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.0002, "potassium_percent": 0.4, "uranium_ppm": 0.8, "thorium_ppm": 2.2},
       "name": "Кварцит",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -315,7 +322,7 @@
     },
     {
       "id": "marble",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.0003, "gamma_response_cps": 6},
+      "geophysical_source": {"magnetic_susceptibility_si": 3e-05, "potassium_percent": 0.3, "uranium_ppm": 1.2, "thorium_ppm": 1.3},
       "name": "Мрамор",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -325,7 +332,7 @@
     },
     {
       "id": "amphibolite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.015, "gamma_response_cps": 10},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.004, "potassium_percent": 0.7, "uranium_ppm": 0.7, "thorium_ppm": 2.5},
       "name": "Амфиболит",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -335,7 +342,7 @@
     },
     {
       "id": "serpentinite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.024, "gamma_response_cps": 6},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.024, "potassium_percent": 0.2, "uranium_ppm": 0.3, "thorium_ppm": 0.8},
       "name": "Серпентинит",
       "category": "metamorphic",
       "minecraft_analogue": "—",
@@ -345,7 +352,7 @@
     },
     {
       "id": "ferruginous_quartzite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.035, "gamma_response_cps": 8},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.035, "potassium_percent": 0.35, "uranium_ppm": 0.8, "thorium_ppm": 2},
       "name": "Железистый кварцит",
       "category": "metamorphic",
       "minecraft_analogue": "Iron Ore",
@@ -355,7 +362,7 @@
     },
     {
       "id": "kimberlite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.019, "gamma_response_cps": 9},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.019, "potassium_percent": 0.7, "uranium_ppm": 1.1, "thorium_ppm": 3},
       "name": "Кимберлит",
       "category": "intrusive",
       "minecraft_analogue": "—",
@@ -365,7 +372,7 @@
     },
     {
       "id": "pegmatite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.001, "gamma_response_cps": 65},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.001, "potassium_percent": 3.7, "uranium_ppm": 0.7, "thorium_ppm": 2},
       "name": "Пегматит",
       "category": "intrusive",
       "minecraft_analogue": "—",
@@ -375,7 +382,7 @@
     },
     {
       "id": "carbonatite",
-      "geophysical_source": {"magnetic_susceptibility_si": 0.007, "gamma_response_cps": 35},
+      "geophysical_source": {"magnetic_susceptibility_si": 0.007, "potassium_percent": 0.5, "uranium_ppm": 2.8, "thorium_ppm": 9.9},
       "name": "Карбонатит",
       "category": "intrusive",
       "minecraft_analogue": "—",

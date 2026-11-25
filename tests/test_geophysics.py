@@ -5,6 +5,7 @@ import math
 import tempfile
 import unittest
 from collections import Counter
+from copy import deepcopy
 from pathlib import Path
 
 from test_observations import ROOT, campaign_config, small_map
@@ -48,12 +49,38 @@ class GeophysicsTests(unittest.TestCase):
         truth, buried = self.truth(), self.truth(5)
         shallow = truth["cells"][-1]["geophysical_fields"]["gamma_count_rate_cps"]
         deep = buried["cells"][-1]["geophysical_fields"]["gamma_count_rate_cps"]
+        covered = self.truth(0.2)["cells"][-1]["geophysical_fields"]["gamma_count_rate_cps"]
         magnetic = [cell["geophysical_fields"]["magnetic_anomaly_nt"] for cell in truth["cells"]]
-        self.assertGreater(shallow - deep, 800)
-        self.assertAlmostEqual(deep, 21, places=2)
+        self.assertAlmostEqual(deep, 1 + 3.36 * 1.8 + 0.586 * 2.3 + 0.265 * 12, places=4)
+        self.assertAlmostEqual(shallow - deep, 0.586 * (0.5 * 8480 - 2.3), places=4)
+        self.assertAlmostEqual((covered - deep) / (shallow - deep), math.exp(-100 * 2.5 * 0.045 * 0.2), places=6)
         self.assertGreater(magnetic[0], magnetic[1])
         self.assertGreater(magnetic[1], magnetic[3])
         self.assertEqual(truth["schema_version"], "2.2")
+
+    def test_gamma_counting_uncertainty_depends_on_expected_rate(self):
+        truth = self.truth()
+        self.config["ideal"] = False
+        self.config["geophysical_survey"].update(gamma_counting_time_s=60, gamma_sigma_cps=0.2)
+        rows = generate_observations(truth, self.config, seed=1)["tables"]["gamma_observations"]
+        for index in (0, 11):
+            expected = truth["cells"][index]["geophysical_fields"]["gamma_count_rate_cps"]
+            sigma = math.sqrt(0.2**2 + expected / 60)
+            self.assertAlmostEqual(rows[index]["gamma_sigma_cps"], sigma, delta=0.00005)
+        self.assertGreater(rows[-1]["gamma_sigma_cps"], rows[0]["gamma_sigma_cps"])
+
+    def test_recomputing_saved_fields_uses_current_rock_calibration(self):
+        truth = self.truth(5)
+        index = 4
+        old_rate = truth["cells"][index]["geophysical_fields"]["gamma_count_rate_cps"]
+        catalog = deepcopy(self.rocks["rocks"])
+        sandstone = next(rock for rock in catalog if rock["id"] == "sandstone")
+        sandstone["geophysical_source"]["potassium_percent"] += 1
+        settings = {"enabled": True, "magnetic_spread_m": 5}
+        add_geophysical_fields(truth, settings, catalog, self.minerals["minerals"])
+        self.assertEqual(truth["cells"][index]["geophysical_fields"]["gamma_count_rate_cps"], old_rate)
+        add_geophysical_fields(truth, settings, catalog, self.minerals["minerals"], replace=True)
+        self.assertAlmostEqual(truth["cells"][index]["geophysical_fields"]["gamma_count_rate_cps"], old_rate + 3.36)
 
     def test_survey_measures_and_exports_without_truth_parameters(self):
         truth = self.truth()

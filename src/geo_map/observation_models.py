@@ -83,6 +83,8 @@ def validate_extensions(config: dict[str, Any], dimensions: dict[str, Any], plan
         _count(settings.get("point_count"), "geophysical_survey.point_count")
         for name in ("position_sigma_m", *(sigma for _, sigma in CHANNELS.values())):
             _number(settings.get(name, 0), f"geophysical_survey.{name}")
+        if "gamma_counting_time_s" in settings:
+            _number(settings["gamma_counting_time_s"], "geophysical_survey.gamma_counting_time_s", positive=True)
     if _enabled(config, "surface_geochemistry"):
         surface = config["surface_geochemistry"]
         if surface.get("layout", "grid") not in {"grid", "random", "manual"}:
@@ -355,11 +357,13 @@ def prepare_preliminary_survey(truth: dict[str, Any], config: dict[str, Any], se
             points = [
                 {**station, "station_id": station["observation_id"],
                  "observation_id": f"{GEOPHYSICAL_PREFIXES[method]}-{index:04d}",
-                 "field_error": _rng(seed, "geophysics", station["observation_id"], method).gauss(0, sigma)}
+                 "standard_error": _rng(seed, "geophysics", station["observation_id"], method).gauss(0, 1)}
                 for index, station in enumerate(stations, 1)
             ]
             methods[table] = {"points": points, "field": field, "sigma_field": sigma_field,
                               "sigma": sigma, "position_uncertainty_m": position_sigma}
+            if method == "gamma" and not ideal and "gamma_counting_time_s" in settings:
+                methods[table]["counting_time_s"] = settings["gamma_counting_time_s"]
     if _enabled(config, "terrain_survey"):
         settings = {**TERRAIN_SURVEY_DEFAULTS, **config["terrain_survey"]}
         count = settings["point_count"]
@@ -472,14 +476,18 @@ def _geophysical_observations(plan: dict[str, Any], sampler: TruthSampler, appen
         field, sigma_field = settings["field"], settings["sigma_field"]
         for point in settings["points"]:
             cell = sampler.column(*point["position"])
-            measured = cell["geophysical_fields"][field] + point["field_error"]
+            value = cell["geophysical_fields"][field]
+            sigma = settings["sigma"]
+            if "counting_time_s" in settings:
+                sigma = math.sqrt(sigma**2 + value / settings["counting_time_s"])
+            measured = value + point["standard_error"] * sigma
             if method == "gamma":
                 measured = max(0, measured)
             append(table, observation_id=point["observation_id"], station_id=point["station_id"],
                    x_m=point["x_m"], y_m=point["y_m"], surface_elevation_m=cell.get("surface_elevation_m", 0),
                    position_uncertainty_m=settings["position_uncertainty_m"],
                    observation_method="ground_geophysical_survey", survey_date=plan["date"],
-                   **{field: round(measured, 4), sigma_field: settings["sigma"]})
+                   **{field: round(measured, 4), sigma_field: round(sigma, 4) if "counting_time_s" in settings else sigma})
 
 
 def survey_preliminary(truth: dict[str, Any], config: dict[str, Any], seed: int,
@@ -718,6 +726,8 @@ def extend_campaign(truth: dict[str, Any], config: dict[str, Any], seed: int, ho
     if _enabled(config, "geophysical_survey"):
         methods["geophysical_survey"].update(point_count=config["geophysical_survey"]["point_count"], layout="grid",
                                               field_available="geophysics" in truth)
+        if "gamma_counting_time_s" in config["geophysical_survey"]:
+            methods["geophysical_survey"]["gamma_counting_time_s"] = config["geophysical_survey"]["gamma_counting_time_s"]
     methods["structures"]["method"] = config.get("structures", {}).get("method", "core_logging")
     if _enabled(config, "trenches"):
         methods["trenches"].update({key: config["trenches"][key] for key in ("sample_length_m", "sampling_height_m")})

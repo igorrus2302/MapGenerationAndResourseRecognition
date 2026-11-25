@@ -13,9 +13,18 @@
   },
   "geophysics": {
     "enabled": true,
-    "magnetic_decay_m": 110,
-    "magnetic_spread_m": 40,
-    "gamma_decay_m": 0.35
+    "model": "reference_ground_survey",
+    "geomagnetic_field_nt": 50000,
+    "magnetic_inclination_deg": 65,
+    "magnetic_source_radius_m": 45,
+    "magnetic_sensor_height_m": 1.5,
+    "magnetic_spread_m": 25,
+    "gamma_mass_attenuation_cm2_g": 0.045,
+    "gamma_background_cps": 1,
+    "gamma_sensitivity_k_cps_per_percent": 3.36,
+    "gamma_sensitivity_u_cps_per_ppm": 0.586,
+    "gamma_sensitivity_th_cps_per_ppm": 0.265,
+    "soil_potassium_retention": 0.7
   },
   "geology": {
     "layer_count": [6, 8],

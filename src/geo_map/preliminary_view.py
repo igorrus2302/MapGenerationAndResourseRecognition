@@ -41,14 +41,16 @@ PRELIMINARY_SCRIPT = r'''
         for (const [table, method] of Object.entries(surveyChannels)) {
           const settings = plan.methods[table];
           if (!settings) continue;
-          const {field, sigma_field: sigmaField, sigma, position_uncertainty_m: positionSigma} = settings;
+          const {field, sigma_field: sigmaField, sigma, counting_time_s: countingTime, position_uncertainty_m: positionSigma} = settings;
           result[table] = settings.points.map(point => {
             const cell = sampled(point);
-            const value = cell.geophysical_fields[field] + point.field_error;
+            const expected = cell.geophysical_fields[field];
+            const uncertainty = countingTime ? Math.sqrt(sigma ** 2 + expected / countingTime) : sigma;
+            const value = expected + point.standard_error * uncertainty;
             return {
               ...record(point, 'ground_geophysical_survey'), station_id: point.station_id,
               surface_elevation_m: elevation(cell), [field]: roundMeasurement(method === 'gamma' ? Math.max(0, value) : value, 4),
-              [sigmaField]: sigma, position_uncertainty_m: positionSigma
+              [sigmaField]: countingTime ? roundMeasurement(uncertainty, 4) : sigma, position_uncertainty_m: positionSigma
             };
           });
         }
