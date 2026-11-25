@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import re
 from pathlib import Path
@@ -223,6 +224,8 @@ HTML_TEMPLATE = r'''<!doctype html>
   <script>
     const MAP_DATA = __MAP_DATA__;
     const OBSERVATION_DATA = __OBSERVATION_DATA__;
+    const OBSERVATION_IMPORT_ROCKS = __OBSERVATION_IMPORT_ROCKS__;
+    const OBSERVATION_IMPORT_XLSX = __OBSERVATION_IMPORT_XLSX__;
     const RECOGNITION_DATA = __RECOGNITION_DATA__;
     const PRELIMINARY_PLAN = __PRELIMINARY_PLAN__;
 
@@ -1019,7 +1022,14 @@ def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[s
     }
     html = re.sub("|".join(replacements), lambda match: replacements[match.group()], HTML_TEMPLATE)
     # Insert each JSON literal once; strings inside the payload are never templates.
+    reference_rocks = [{"id": rock["id"], "name": rock["name"], "color": rock["color"]}
+                       for rock in data.get("rocks", [])]
+    embedded_rocks = json.dumps(reference_rocks, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    workbook = Path(__file__).resolve().parents[2] / "templates/observations/manual/manual_observations.xlsx"
+    template_bytes = base64.b64encode(workbook.read_bytes()).decode("ascii") if workbook.is_file() else ""
     data_replacements = {"__OBSERVATION_DATA__": public_observations, "__RECOGNITION_DATA__": public_recognition,
+                         "__OBSERVATION_IMPORT_ROCKS__": embedded_rocks,
+                         "__OBSERVATION_IMPORT_XLSX__": json.dumps(template_bytes),
                          "__MAP_DATA__": embedded, "__PRELIMINARY_PLAN__": embedded_plan}
     html = re.sub("|".join(data_replacements), lambda match: data_replacements[match.group()], html)
     output_path.write_text(html, encoding="utf-8")

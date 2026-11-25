@@ -2,6 +2,7 @@
 
 from .expedition_methods_view import FIELD_METHODS_HTML, METHODS_SCRIPT, METHODS_STYLES, PRELIMINARY_METHODS_HTML
 from .preliminary_view import PRELIMINARY_SCRIPT
+from .observation_import_view import IMPORT_ENGINE, IMPORT_STYLES, IMPORT_UI, import_panel
 from .reconstruction_view import RECONSTRUCTION_STYLES, RECONSTRUCTION_HTML, MINERALS_PANEL, RECONSTRUCTION_SCRIPT
 
 WORKSPACE_STYLES = r'''
@@ -104,6 +105,7 @@ WORKSPACE_PANELS = r'''
       <h2>Предварительные наблюдения</h2>
       <p id="preliminaryStatus" aria-live="polite">Соберите данные о магнитном поле, гамма-фоне, рельефе и обнажениях на текущей карте.</p>
       <button id="collectPreliminary" type="button" class="primary-button">Собрать наблюдения</button>
+      <button id="openManualPreliminary" type="button">Открыть разделы для ручной загрузки</button>
     </div>
     <div id="preliminaryContent" class="hidden">
       <div class="expedition-heading">
@@ -116,6 +118,7 @@ WORKSPACE_PANELS = r'''
           <div><h3 id="preliminaryDataTitle"></h3><span id="preliminaryCount" class="muted" aria-live="polite"></span></div>
           <div class="data-downloads"><button id="downloadPreliminaryGeoJson">Скачать GeoJSON</button><button id="downloadPreliminaryCsv">CSV всей таблицы</button></div>
         </div>
+        __PRELIMINARY_IMPORT__
         <div class="table-scroll"><table class="observation-table"><thead id="preliminaryTableHead"></thead><tbody id="preliminaryTableBody"></tbody></table></div>
         <div class="table-footer"><span id="preliminaryPageInfo" aria-live="polite"></span><div class="page-buttons"><button id="preliminaryPrevious">← Назад</button><button id="preliminaryNext">Далее →</button></div></div>
       </div>
@@ -159,6 +162,7 @@ WORKSPACE_PANELS = r'''
       <div class="panel-card">
         <div class="data-heading"><div><h3 id="dataSectionTitle">Данные экспедиции</h3><div class="muted">Наблюдения и измерения выбранного раздела</div></div><div class="data-downloads"><button id="downloadMethodGeoJson" class="hidden">Скачать GeoJSON</button><button id="downloadDrillingSource" class="hidden">Скачать источник · JSON</button><button id="downloadObservationCsv">CSV всей таблицы</button></div></div>
         <div class="data-tabs" id="observationTabs"></div>
+        __FIELD_IMPORT__
         <div class="data-filters">
           <label id="sourceFilterLabel">Источник бурения<select id="observationSourceFilter"></select></label>
           <label id="holeFilterLabel">Скважина<select id="observationHoleFilter"></select></label>
@@ -223,7 +227,7 @@ WORKSPACE_SCRIPT = r'''
           tab.tabIndex = selected ? 0 : -1;
         }
         if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
-        document.getElementById('headerStats').innerHTML = stats[name];
+        document.getElementById('headerStats').innerHTML = name==='expedition'&&summary?`<span>${summary.hole_count} скважин</span><span>${summary.total_sample_count ?? summary.sample_count} полевых проб</span>`:stats[name];
         if (name === 'truth') requestAnimationFrame(resizeCanvas);
       }
       for (const button of document.querySelectorAll('[data-workspace]')) button.addEventListener('click', () => activate(button.dataset.workspace));
@@ -262,6 +266,8 @@ WORKSPACE_SCRIPT = r'''
         slope: {label: 'Склон', color: '#6544a6'}, flat: {label: 'Ровный участок', color: '#288362'},
         undetermined: {label: 'Мало данных', color: '#64748b'}
       };
+      __IMPORT_ENGINE__
+      __IMPORT_UI__
       __PRELIMINARY_SCRIPT__
       if (!observations) {
         document.getElementById('expeditionEmpty').classList.remove('hidden');
@@ -285,7 +291,7 @@ WORKSPACE_SCRIPT = r'''
         key.innerHTML = Object.entries(drillingKinds).filter(([kind]) => counts[kind]).map(([kind, {label, color}]) =>
           `<span><i style="background:${color}"></i>${label} · ${counts[kind]}</span>`).join('');
       }
-      const drillingSources = observations.borehole_sources || [];
+      const drillingSources = observations.borehole_sources || (observations.borehole_sources = []);
       const sourceByKind = new Map(drillingSources.map(source => [source.kind, source]));
       const rocks = Object.fromEntries(observations.rock_catalog.map(rock => [rock.id, rock]));
       let selectedHole = holes[0]?.hole_id;
@@ -294,11 +300,21 @@ WORKSPACE_SCRIPT = r'''
       const summary = observations.summary;
       element('expeditionTitle').textContent = observations.campaign.title;
       element('expeditionSubtitle').textContent = `${observations.campaign.campaign_id} · ${observations.campaign.date} · бурение, полевые пробы и лабораторные анализы`;
+      function drawExpeditionMetrics() {
       element('expeditionMetrics').innerHTML = [[summary.hole_count, 'скважин'], [`${number(summary.drilled_m)} м`, 'пройдено бурением'], [number(summary.total_sample_count ?? summary.sample_count), 'полевых проб всех методов'], [number(summary.total_assay_count ?? summary.assay_count), 'результатов полевых проб']].map(([value, label]) => `<div class="metric-card"><strong>${escape(value)}</strong><span>${label}</span></div>`).join('');
+      }
+      drawExpeditionMetrics();
       const options = holes.map(hole => `<option value="${escape(hole.hole_id)}">${escape(hole.hole_id)}</option>`).join('');
       element('observationHoleFilter').innerHTML = '<option value="">Все скважины</option>' + options;
-      element('observationSourceFilter').innerHTML = '<option value="">Все источники бурения</option>' + drillingSources.map(source => `<option value="${escape(source.kind)}">${escape(source.title)} · ${source.summary.hole_count} скв.</option>`).join('');
-      element('profileSource').innerHTML = element('observationSourceFilter').innerHTML;
+      function refreshSourceOptions() {
+        const sourceFilter=element('observationSourceFilter'), previous=sourceFilter.value;
+        sourceByKind.clear();for(const source of drillingSources)sourceByKind.set(source.kind,source);
+        sourceFilter.innerHTML = '<option value="">Все источники бурения</option>' + drillingSources.map(source => `<option value="${escape(source.kind)}">${escape(source.title)} · ${source.summary.hole_count} скв.</option>`).join('');
+        sourceFilter.value=sourceByKind.has(previous)?previous:'';
+        element('profileSource').innerHTML = sourceFilter.innerHTML;
+        element('profileSource').value=sourceFilter.value;
+      }
+      refreshSourceOptions();
       element('profileSourceLabel').classList.toggle('hidden', !drillingSources.length);
       element('profileHole').innerHTML = options;
       const analyteOptions = observations.plan.analytes.map(item => `<option value="${escape(item.analyte)}">${escape(item.analyte)} · ${escape(item.unit)}</option>`).join('');
@@ -553,7 +569,7 @@ WORKSPACE_SCRIPT = r'''
         const assays = tables.borehole_assays.filter(row => row.hole_id === selectedHole && row.analyte === analyte);
         const scale = 230 / hole.total_depth_m;
         const axisLeft = 380, axisWidth = 250;
-        const maximum = Math.max(...assays.map(row => row.result_value), observations.plan.analytes.find(item => item.analyte === analyte).detection_limit);
+        const maximum = Math.max(1e-9,...assays.map(row => row.result_value), observations.plan.analytes.find(item => item.analyte === analyte)?.detection_limit ?? 0);
         const target = drillingTargets.get(hole.hole_id);
         element('holeProfileTitle').textContent = target ? `${selectedHole} · ${drillingKinds[target.method].label} · ${target.observation_id}` : selectedHole;
         element('holeProfileCaption').textContent = `Устье X ${number(hole.x_m)} · Y ${number(hole.y_m)} м · ствол ${number(hole.total_depth_m)} м · угол ${number(hole.dip_deg)}° · азимут ${number(hole.azimuth_deg)}°`;
@@ -573,7 +589,7 @@ WORKSPACE_SCRIPT = r'''
           const y = 36 + assay.from_m * scale, h = Math.max(.6, (assay.to_m - assay.from_m) * scale - .4);
           markup += `<rect x="${axisLeft}" y="${y}" width="${Math.max(1, assay.result_value / maximum * axisWidth)}" height="${h}" fill="${below ? '#b7c9d5' : '#168c86'}"><title>${number(assay.from_m)}–${number(assay.to_m)} м: ${below ? '&lt; ' : ''}${number(assay.result_value)} ${escape(assay.unit)}</title></rect>`;
         }
-        markup += `<text x="${axisLeft}" y="286" font-size="10" fill="#627d98">0</text><text x="${axisLeft + axisWidth}" y="286" text-anchor="end" font-size="10" fill="#627d98">${number(maximum)} ${escape(observations.plan.analytes.find(item => item.analyte === analyte).unit)}</text>`;
+        markup += `<text x="${axisLeft}" y="286" font-size="10" fill="#627d98">0</text><text x="${axisLeft + axisWidth}" y="286" text-anchor="end" font-size="10" fill="#627d98">${number(maximum)} ${escape(observations.plan.analytes.find(item => item.analyte === analyte)?.unit ?? '')}</text>`;
         element('holeProfile').innerHTML = markup;
         element('profileKey').innerHTML = '<span><i style="background:#168c86"></i>Измеренный результат</span><span><i style="background:#b7c9d5"></i>Верхняя граница: ниже предела обнаружения</span><span>Пустой участок — проба пропущена</span>';
         drawTrajectory(hole);
@@ -591,7 +607,9 @@ WORKSPACE_SCRIPT = r'''
           tabButtons[key] = button; element('observationTabs').appendChild(button);
         }
       }
+      let updateFieldImportHint = () => {};
       function renderTable() {
+        updateFieldImportHint();
         for (const [key, button] of Object.entries(tabButtons)) button.setAttribute('aria-pressed', String(key === activeTable));
         const holeFilter = element('observationHoleFilter').value;
         const analyteFilter = element('observationAnalyteFilter').value;
@@ -640,6 +658,15 @@ WORKSPACE_SCRIPT = r'''
       element('observationNext').addEventListener('click', () => { page++; renderTable(); });
       drawSurvey(); drawProfile();
       __METHODS_SCRIPT__
+      updateFieldImportHint=setupImportControls('field',()=>activeTable,
+        ()=>element('fieldImportWhole').checked?Object.keys(observations.table_fields):activeSection==='boreholes'?ObservationImport.boreholeTables:sections[activeSection].tables,
+        ()=>element('fieldImportWhole').checked?'':element('observationSourceFilter').value);
+      refreshFieldwork=()=>{
+        for(const rock of observations.rock_catalog)rocks[rock.id]=rock;
+        drawExpeditionMetrics();refreshSourceOptions();updateSourceHoles();
+        if(location.hash==='#expedition')element('headerStats').innerHTML=`<span>${summary.hole_count} скважин</span><span>${summary.total_sample_count} полевых проб</span>`;
+        refreshFieldMethodRecords();page=0;renderTable();
+      };
       renderRecognition(RECOGNITION_DATA);
     })(OBSERVATION_DATA);
 '''
@@ -652,3 +679,7 @@ WORKSPACE_SCRIPT = WORKSPACE_SCRIPT.replace('__PRELIMINARY_SCRIPT__', PRELIMINAR
 WORKSPACE_STYLES += RECONSTRUCTION_STYLES
 WORKSPACE_PANELS = WORKSPACE_PANELS.replace("__RECONSTRUCTION_HTML__", RECONSTRUCTION_HTML).replace("__MINERALS_PANEL__", MINERALS_PANEL)
 WORKSPACE_SCRIPT = WORKSPACE_SCRIPT.replace("__RECONSTRUCTION_SCRIPT__", RECONSTRUCTION_SCRIPT)
+
+WORKSPACE_STYLES += IMPORT_STYLES
+WORKSPACE_PANELS = WORKSPACE_PANELS.replace('__PRELIMINARY_IMPORT__', import_panel('preliminary')).replace('__FIELD_IMPORT__', import_panel('field'))
+WORKSPACE_SCRIPT = WORKSPACE_SCRIPT.replace('__IMPORT_ENGINE__', IMPORT_ENGINE).replace('__IMPORT_UI__', IMPORT_UI)

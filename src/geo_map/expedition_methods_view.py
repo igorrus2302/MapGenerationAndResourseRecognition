@@ -121,10 +121,11 @@ METHODS_SCRIPT = r'''
       element('observationTrenchFilter').innerHTML = '<option value="">Все траншеи</option>' + trenches.map(row => `<option value="${escape(row.trench_id)}">${escape(row.trench_id)}</option>`).join('');
 
       const surfaceAnalytes = observations.plan.methods?.surface_geochemistry?.analytes || [];
+      const surfaceOptions=()=>[...new Map([...surfaceAnalytes,...(tables.surface_geochemistry||[])].map(item=>[item.analyte,item])).values()];
       const surfaceSamples = new Map((tables.surface_geochemistry || []).map(row => [row.sample_id, row]));
       element('surfaceSampleSelect').innerHTML = '<option value="">Все почвенные пробы</option>' + [...surfaceSamples.keys()].map(id => `<option value="${escape(id)}">${escape(id)}</option>`).join('');
       element('surfaceSampleSelect').disabled = !surfaceSamples.size;
-      element('surfaceMapAnalyte').innerHTML = surfaceAnalytes.map(item => `<option value="${escape(item.analyte)}">${escape(item.analyte)} · ${escape(item.unit)}</option>`).join('');
+      element('surfaceMapAnalyte').innerHTML = surfaceOptions().map(item => `<option value="${escape(item.analyte)}">${escape(item.analyte)} · ${escape(item.unit)}</option>`).join('');
       function drawSurface() {
         const analyte = element('surfaceMapAnalyte').value;
         const selected = element('surfaceSampleSelect').value;
@@ -205,6 +206,7 @@ METHODS_SCRIPT = r'''
       element('trenchMap').addEventListener('click', event => { const target = event.target.closest('[data-trench]'); if (target) selectTrench(target.dataset.trench); });
       element('trenchMap').addEventListener('keydown', event => { if (!['Enter', ' '].includes(event.key)) return; const target = event.target.closest('[data-trench]'); if (target) { event.preventDefault(); selectTrench(target.dataset.trench); } });
 
+      function drawStructureAndQuality() {
       const structures = tables.structural_observations || [];
       const oriented = structures.filter(row => row.feature_type === 'fault' && row.strike_deg !== null).length;
       element('structureMetrics').innerHTML = [[summary.contact_count, 'контактов'], [summary.fault_observation_count || 0, 'зон нарушений'], [oriented, 'определений ориентации']].map(([value, label]) => `<span><b>${number(value)}</b>${label}</span>`).join('');
@@ -212,5 +214,27 @@ METHODS_SCRIPT = r'''
       const controls = tables.quality_control || [];
       element('qualityMetrics').innerHTML = [['pass', 'в допуске'], ['warning', 'предупреждений'], ['fail', 'вне допуска'], ['not_checked', 'не оценено']].map(([flag, label]) => `<span class="qc-${flag}"><b>${number(controls.filter(row => row.qc_flag === flag).length)}</b>${label}</span>`).join('');
       element('qualityCaption').textContent = `${summary.qc_sample_count || 0} контрольных проб · ${summary.qc_result_count || 0} результатов. Дубликаты, холостые пробы и стандарты отбираются по заданному плану лабораторного контроля.`;
+      }
+      function refreshFieldMethodRecords() {
+        const sampleSelect=element('surfaceSampleSelect'), selectedSample=sampleSelect.value;
+        surfaceSamples.clear();
+        for(const row of tables.surface_geochemistry||[])surfaceSamples.set(row.sample_id,row);
+        sampleSelect.innerHTML='<option value="">Все почвенные пробы</option>'+[...surfaceSamples.keys()].map(id=>`<option value="${escape(id)}">${escape(id)}</option>`).join('');
+        sampleSelect.value=surfaceSamples.has(selectedSample)?selectedSample:'';
+        sampleSelect.disabled=!surfaceSamples.size;
+        const analyteSelect=element('surfaceMapAnalyte'), oldAnalyte=analyteSelect.value, options=surfaceOptions();
+        analyteSelect.innerHTML=options.map(item=>`<option value="${escape(item.analyte)}">${escape(item.analyte)} · ${escape(item.unit)}</option>`).join('');
+        if(options.some(item=>item.analyte===oldAnalyte))analyteSelect.value=oldAnalyte;
+        const trenchFilter=element('observationTrenchFilter'), previous=trenchFilter.value;
+        const trenchOptions=trenches.map(row=>`<option value="${escape(row.trench_id)}">${escape(row.trench_id)}</option>`).join('');
+        trenchFilter.innerHTML='<option value="">Все траншеи</option>'+trenchOptions;
+        trenchFilter.value=trenches.some(row=>row.trench_id===previous)?previous:'';
+        if(!trenches.some(row=>row.trench_id===selectedTrench))selectedTrench=trenches[0]?.trench_id;
+        element('trenchSelect').innerHTML=trenchOptions;
+        element('trenchSelect').value=selectedTrench??'';
+        element('trenchSelect').disabled=!trenches.length;
+        drawSurface();drawTrenches();drawStructureAndQuality();
+      }
+      drawStructureAndQuality();
       drawSurface(); drawTrenches(); activateSection('boreholes');
 '''

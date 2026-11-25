@@ -1,0 +1,1 @@
+campaign_id,trench_id,sample_id,from_m,to_m,sampling_depth_from_m,sampling_depth_to_m,sample_material,sampling_method,analyte,result_value,result_qualifier,unit,detection_limit,analysis_method,laboratory,certificate_id,qc_type,qc_flag

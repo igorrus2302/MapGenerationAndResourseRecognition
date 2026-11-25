@@ -129,7 +129,7 @@ PRELIMINARY_SCRIPT = r'''
             const color = rockById[row.observed_rock_id]?.color || '#1677a8';
             return `<circle ${attributes(row, x, y, 4.5, '#243b53')} fill="${escape(color)}"><title>${escape(row.observation_id)} · ${escape(row.observed_rock_name)} · ${number(row.surface_elevation_m)} м</title></circle>`;
           }).join('');
-          element('outcropCaption').textContent = `${number(rows.length)} обнажений на ${number(settings.points?.length ?? settings.point_count)} обследованных точках. Цвет соответствует наблюдённой породе.`;
+          element('outcropCaption').textContent = `${number(rows.length)} обнажений на ${number(settings.points?.length ?? settings.point_count ?? rows.length)} обследованных точках. Цвет соответствует наблюдённой породе.`;
         } else if (method === 'terrain_survey') {
           const counts = new Map();
           element('terrainSurveyMap').innerHTML = markup + points.map(row => {
@@ -138,7 +138,7 @@ PRELIMINARY_SCRIPT = r'''
             counts.set(type.label, (counts.get(type.label) || 0) + 1);
             return `<circle ${attributes(row, x, y, radius)} fill="${type.color}"><title>${escape(row.observation_id)} · ${type.label} · ${number(row.surface_elevation_m)} м</title></circle>`;
           }).join('');
-          element('terrainSurveyCaption').textContent = `${number(rows.length)} точек · порог уклона ${number(settings.slope_threshold_deg)}° · порог относительной высоты ${number(settings.local_relief_threshold_m)} м`;
+          element('terrainSurveyCaption').textContent = `${number(rows.length)} точек · порог уклона ${settings.slope_threshold_deg == null?'не задан':number(settings.slope_threshold_deg)+'°'} · порог относительной высоты ${settings.local_relief_threshold_m == null?'не задан':number(settings.local_relief_threshold_m)+' м'}`;
           element('terrainSurveyLegend').innerHTML = Object.values(terrainTypes).filter(type => counts.has(type.label))
             .map(type => `<span style="color:${type.color}">● ${type.label} · ${number(counts.get(type.label))}</span>`).join(' &nbsp; ');
         } else {
@@ -160,7 +160,7 @@ PRELIMINARY_SCRIPT = r'''
       function initPreliminary() {
         const plan = PRELIMINARY_PLAN;
         const settings = plan?.methods ?? observations?.plan?.methods ?? {};
-        const tableFields = plan?.table_fields ?? observations?.table_fields ?? {};
+        const tableFields = observations?.table_fields ?? plan?.table_fields ?? {};
         const definitions = {
           magnetic_observations: {label: 'Магнитное поле', panel: 'geophysicalOverview', table: 'magnetic_observations',
             title: 'Магнитные наблюдения', archiveSetting: 'geophysical_survey'},
@@ -169,24 +169,33 @@ PRELIMINARY_SCRIPT = r'''
           terrain_survey: {label: 'Рельеф', panel: 'terrainSurveyOverview', table: 'terrain_observations', title: 'Точки съёмки рельефа'},
           outcrops: {label: 'Обнажения', panel: 'outcropOverview', table: 'outcrop_observations', title: 'Наблюдения обнажений'}
         };
-        const methods = Object.fromEntries(Object.entries(definitions).filter(([key, {table, archiveSetting}]) =>
+        const enabled = Object.fromEntries(Object.entries(definitions).filter(([key, {table, archiveSetting}]) =>
           (plan ? settings[key] : settings[archiveSetting ?? key]?.enabled) && tableFields[table]));
+        const methods = observations
+          ? Object.fromEntries(Object.entries(definitions).filter(([, {table}])=>tableFields[table]))
+          : enabled;
         const keys = Object.keys(methods);
         const start = element('collectPreliminary');
+        const manual = element('openManualPreliminary');
         const status = element('preliminaryStatus');
-        if (!keys.length) {
+        if(!observations)manual.classList.add('hidden');
+        if(!Object.keys(enabled).length){
           start.classList.add('hidden');
-          status.textContent = 'Для этой карты сбор предварительных наблюдений отключён в настройках.';
-          return;
+          status.textContent='Автоматическая съёмка отключена. Можно загрузить свои наблюдения вручную.';
         }
-        start.addEventListener('click', () => {
+        if(!keys.length)return;
+        function openSections() {
           if (start.disabled) return;
           start.disabled = true;
+          manual.disabled = true;
           let results;
           try {
-            results = plan ? collectSurvey(plan) : observations.tables;
+            // The archived measurements and manually imported records are the
+            // authoritative observations when an expedition already exists.
+            results = observations ? observations.tables : collectSurvey(plan);
           } catch {
             start.disabled = false;
+            manual.disabled = false;
             status.textContent = 'Не удалось собрать наблюдения по этой карте. Попробуйте ещё раз.';
             return;
           }
@@ -204,7 +213,7 @@ PRELIMINARY_SCRIPT = r'''
                                          page, 'Для этого раздела пока нет наблюдений');
           }
           function renderMap() {
-            drawPreliminaryMap(active, activeRows(), settings[active] ?? settings[methods[active].archiveSetting], selectedPoint());
+            drawPreliminaryMap(active, activeRows(), settings[active] ?? settings[methods[active].archiveSetting] ?? {}, selectedPoint());
             const row = selectedRow();
             const detailFields = {
               magnetic_observations: ['magnetic_anomaly_nt', 'magnetic_sigma_nt'],
@@ -226,8 +235,10 @@ PRELIMINARY_SCRIPT = r'''
             pointFilter.value = id;
             page = 0; renderMap(); renderTable();
           }
+          let updateImportHint=()=>{};
           function activate(key) {
             active = key;
+            updateImportHint();
             page = 0;
             for (const [name, method] of Object.entries(methods)) {
               element(method.panel).classList.toggle('hidden', method.panel !== methods[key].panel);
@@ -255,7 +266,7 @@ PRELIMINARY_SCRIPT = r'''
           }
           element('downloadPreliminaryGeoJson').addEventListener('click', () => {
             const name = activeTable();
-            const geojson = plan ? surveyGeoJson(name, activeRows()) : observations.geojson?.[name] ?? surveyGeoJson(name, activeRows());
+            const geojson = observations?.geojson?.[name] ?? surveyGeoJson(name, activeRows());
             download(JSON.stringify(geojson, null, 2), `${name}.geojson`, 'application/geo+json');
           });
           element('downloadPreliminaryCsv').addEventListener('click', () => {
@@ -265,10 +276,14 @@ PRELIMINARY_SCRIPT = r'''
           element('preliminaryPrevious').addEventListener('click', () => { page--; renderTable(); });
           element('preliminaryNext').addEventListener('click', () => { page++; renderTable(); });
           activate(keys[0]);
+          updateImportHint=setupImportControls('preliminary',activeTable,()=>[activeTable()]);
+          refreshPreliminary=()=>activate(active);
           element('preliminaryEmpty').classList.add('hidden');
           element('preliminaryContent').classList.remove('hidden');
           buttons[keys[0]].focus();
-        });
+        }
+        start.addEventListener('click',openSections);
+        manual.addEventListener('click',openSections);
       }
       initPreliminary();
 '''

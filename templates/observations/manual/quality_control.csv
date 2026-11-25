@@ -1,0 +1,1 @@
+campaign_id,control_id,sample_id,parent_sample_id,sample_source,hole_id,trench_id,qc_type,analyte,result_value,result_qualifier,unit,detection_limit,reference_value,reference_uncertainty,absolute_difference,relative_difference_percent,acceptance_limit,acceptance_unit,qc_flag,notes

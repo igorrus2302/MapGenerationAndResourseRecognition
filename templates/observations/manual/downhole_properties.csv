@@ -1,0 +1,1 @@
+campaign_id,hole_id,measurement_id,from_m,to_m,depth_m,density_g_cm3,porosity_percent,measurement_method,density_error_g_cm3,porosity_error_percent,qc_flag

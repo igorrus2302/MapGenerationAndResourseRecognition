@@ -236,7 +236,9 @@ def _path_targets(tables, rules, rocks, duplicate_qc, counts, source):
         for row in sorted(tables.get("structural_observations", ()), key=lambda row: row["observation_id"]):
             structures[row[site_field]].append(row)
         if rocks:
-            for row in sorted(tables.get("downhole_properties", ()), key=lambda row: row["from_m"]):
+            intervals = (row for row in tables.get("downhole_properties", ())
+                         if row.get("from_m") is not None and row.get("to_m") is not None)
+            for row in sorted(intervals, key=lambda row: row["from_m"]):
                 properties[row[site_field]].append(row)
 
     groups = defaultdict(list)

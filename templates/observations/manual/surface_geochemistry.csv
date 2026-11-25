@@ -1,0 +1,1 @@
+campaign_id,sample_id,x_m,y_m,sample_date,sample_material,sampling_depth_from_m,sampling_depth_to_m,sampling_method,analyte,result_value,result_qualifier,unit,detection_limit,analysis_method,laboratory,certificate_id,position_uncertainty_m,qc_type,parent_sample_id,qc_flag,notes

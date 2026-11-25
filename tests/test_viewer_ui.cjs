@@ -35,7 +35,7 @@ class Element {
   }
   get innerHTML() { return this.markup || ''; }
   addEventListener(name, callback) { (this.listeners[name] ||= []).push(callback); }
-  fire(name, event = {}) { for (const callback of this.listeners[name] || []) callback({preventDefault() {}, ...event}); }
+  fire(name, event = {}) { return (this.listeners[name] || []).map(callback => callback({preventDefault() {}, ...event})); }
   click() { this.fire('click'); }
   setAttribute(name, value) { this.attributes[name] = value; }
   appendChild(child) { this.children.push(child); }
@@ -79,6 +79,7 @@ const context = vm.createContext({
   requestAnimationFrame() {},
   ResizeObserver: class { observe() {} },
   Blob,
+  atob,
   URL: {createObjectURL(blob) { blobs.push(blob); return `blob:${blobs.length}`; }, revokeObjectURL() {}},
   setTimeout() {},
 });
@@ -140,8 +141,10 @@ const hasMethod = key => Boolean(preliminaryPlan ? surveySettings[key] :
 const hasSurvey = [...geophysicalTables, 'terrain_survey', 'outcrops'].some(hasMethod);
 assert.equal(get('collectPreliminary').classList.contains('hidden'), !hasSurvey);
 if (hasSurvey) get('collectPreliminary').click();
-assert.equal(get('preliminaryEmpty').classList.contains('hidden'), hasSurvey);
-assert.equal(get('preliminaryContent').classList.contains('hidden'), !hasSurvey);
+else if (observations) get('openManualPreliminary').click();
+const openedPreliminary=hasSurvey||Boolean(observations);
+assert.equal(get('preliminaryEmpty').classList.contains('hidden'), openedPreliminary);
+assert.equal(get('preliminaryContent').classList.contains('hidden'), !openedPreliminary);
 get('tab-expedition').click();
 assert.equal(get('truthPanel').classList.contains('hidden'), true);
 assert.equal(get('similarityPanel').classList.contains('hidden'), true);
@@ -239,7 +242,7 @@ if (!observations) {
   const surveyButtons = get('preliminarySections').children;
   assert.deepEqual(fieldMethods, ['boreholes', 'surface', 'trenches', 'structures', 'quality']);
   assert.deepEqual(surveyButtons.map(button => button.dataset.method),
-    [...geophysicalMethods, hasTerrainSurvey && 'terrain_survey', hasOutcrops && 'outcrops'].filter(Boolean));
+    ['magnetic_observations','gamma_observations','terrain_survey','outcrops'].filter(k=>observations.table_fields[k==='terrain_survey'?'terrain_observations':k==='outcrops'?'outcrop_observations':k]));
   assert.equal(get('preliminaryEmpty').classList.contains('hidden'), surveyButtons.length > 0);
   assert.equal(get('preliminaryContent').classList.contains('hidden'), surveyButtons.length === 0);
   get('expeditionSections').children[1].click();
@@ -483,7 +486,7 @@ if (!observations) {
   get('tab-expedition').fire('keydown', {key: 'ArrowLeft'});
   assert.equal(location.hash, '#preliminary');
   assert.equal(get('preliminaryTableHead').innerHTML, preliminaryTable);
-  Promise.all(blobs.map(blob => blob.text())).then(values => {
+  Promise.all(blobs.map(blob => blob.text())).then(async values => {
     const [json, csv, surfaceJson, trenchJson] = values;
     assert.equal(json, JSON.stringify(observations, null, 2));
     assert.equal(csv.split('\r\n').length, observations.tables.borehole_assays.length + 2);
@@ -531,6 +534,54 @@ if (!observations) {
         assert.deepEqual(pack, saved);
       }
     }
-    console.log('Expedition views, recognition map, filters and JSON/CSV/GeoJSON downloads: OK');
+    // Exercise both upload controls, including rejection without mutation.
+    async function upload(id, name, payload) {
+      const input=get(id);
+      input.files=[{name,text:async()=>typeof payload==='string'?payload:JSON.stringify(payload)}];
+      await Promise.all(input.fire('change'));
+    }
+    const table=observations.tables.magnetic_observations?.length?'magnetic_observations':'terrain_observations';
+    const method=table==='terrain_observations'?'terrain_survey':table;
+    if(observations.tables[table]?.length){
+      get('tab-preliminary').click();selectSurvey(method);
+      const original=observations.tables[table].length;
+      const manual={...observations.tables[table][0],observation_id:'MANUAL-UI-SURVEY-TEST',x_m:observations.campaign.width_m/2,y_m:observations.campaign.height_m/2};
+      if(manual.station_id)manual.station_id='MANUAL-STATION-TEST';
+      await upload('preliminaryImportFile','manual.json',[manual]);
+      assert.equal(get('preliminaryImportStatus').dataset.state,'success',get('preliminaryImportStatus').textContent);
+      assert.doesNotMatch(get('preliminaryImportStatus').textContent,/не удалось обновить отображение/);
+      assert.equal(observations.tables[table].length,original+1);
+      assert.ok(get('preliminaryPointFilter').innerHTML.includes(manual.observation_id));
+      assert.ok(get(table==='terrain_observations'?'terrainSurveyMap':'geophysicalMap').innerHTML.includes(manual.observation_id));
+      assert.equal(get('recognitionContent').classList.contains('hidden'),true);
+      assert.equal(get('mineralsContent').classList.contains('hidden'),true);
+      await upload('preliminaryImportFile','renamed.json',[manual]);
+      assert.equal(get('preliminaryImportStatus').dataset.state,'duplicate');
+      assert.equal(observations.tables[table].length,original+1);
+      await upload('preliminaryImportFile','conflict.json',[{...manual,surface_elevation_m:manual.surface_elevation_m+1}]);
+      assert.equal(get('preliminaryImportStatus').dataset.state,'error');
+      assert.equal(observations.tables[table].length,original+1);
+      assert.match(get('preliminaryImportStatus').textContent,/Конфликт дубликата/);
+      get('preliminaryImportTemplate').click();
+      assert.equal((await blobs.at(-1).text()).trim(),observations.table_fields[table].map(f=>'"'+f+'"').join(','));
+    }
+    get('tab-expedition').click();
+    get('expeditionSections').children.find(button=>button.dataset.method==='boreholes').click();
+    const count=observations.tables.borehole_collars.length;
+    const newHole={...observations.tables.borehole_collars[0],hole_id:'MANUAL-BH-UI-TEST',dip_deg:-90,azimuth_deg:0,total_depth_m:20,x_m:observations.campaign.width_m/2,y_m:observations.campaign.height_m/2};
+    await upload('fieldImportFile','new_hole.json',[newHole]);
+    assert.equal(get('fieldImportStatus').dataset.state,'success',get('fieldImportStatus').textContent);
+    assert.doesNotMatch(get('fieldImportStatus').textContent,/не удалось обновить отображение/);
+    assert.equal(observations.tables.borehole_collars.length,count+1);
+    assert.equal(observations.summary.hole_count,count+1);
+    assert.ok(get('profileHole').innerHTML.includes(newHole.hole_id));
+    get('fieldImportExport').click();
+    const merged=JSON.parse(await blobs.at(-1).text());
+    assert.equal(merged.tables.borehole_collars.at(-1).hole_id,newHole.hole_id);
+    assert.ok(merged.import_log.length>=1);
+    get('fieldImportWorkbook').click();
+    const expectedWorkbook=fs.readFileSync(require('node:path').join(__dirname,'../templates/observations/manual/manual_observations.xlsx'));
+    assert.deepEqual(Buffer.from(await blobs.at(-1).arrayBuffer()), expectedWorkbook);
+    console.log('Expedition views, recognition map, filters, downloads and manual observation imports: OK');
   }).catch(error => { console.error(error); process.exitCode = 1; });
 }
