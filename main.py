@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import secrets
+import shutil
 import sys
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from geo_map import (
 )
 from geo_map.recognition import recognize_deposits, save_recognition
 from geo_map.geophysics import add_geophysical_fields
+from geo_map.workspace_server import serve_workspace
 
 
 def parse_args() -> argparse.Namespace:
@@ -76,6 +78,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Зафиксировать seed; без параметра seed выбирается случайно",
     )
+    parser.add_argument("--batch", action="store_true",
+                        help="Сразу сформировать и сохранить всю экспедицию без интерактивного запуска")
+    parser.add_argument("--port", type=int, default=0,
+                        help="Порт локального просмотрщика (0 — выбрать свободный)")
+    parser.add_argument("--no-browser", action="store_true",
+                        help="Не открывать браузер автоматически")
     return parser.parse_args()
 
 
@@ -99,22 +107,72 @@ def main() -> None:
         rock_catalog = config
     observation_config = load_observation_config(args.observations_config)
     observation_seed = secrets.randbits(63) if args.observation_seed is None else args.observation_seed
+    prepare_run_output(data, args.output, input_paths=(args.map, args.config, args.rocks,
+                                                      args.minerals, args.observations_config))
+
+    def collect() -> Path:
+        return run_expedition(data, args.output, observation_config, observation_seed,
+                              mineral_catalog, rock_catalog, preliminary_collected=not args.batch)
+
+    if args.batch:
+        collect()
+    else:
+        serve_workspace(data, observation_config, observation_seed, collect,
+                        port=args.port, open_browser=not args.no_browser)
+
+
+def prepare_run_output(data: dict, output: Path, *, input_paths: tuple[Path | None, ...] = ()) -> None:
+    """Remove previous generated results before exposing the new truth map."""
+    generated_directories = ("observations", "internal")
+    generated_files = ("recognition.json", "reconstructed_map.json", "map_view.html", "map.json")
+    root = output.resolve()
+    for source in input_paths:
+        if source is None:
+            continue
+        source = source.resolve()
+        if source == root / "map.json":
+            continue  # The current truth map is already loaded in memory.
+        if any(source.is_relative_to(root / name) for name in (*generated_directories, *generated_files)):
+            raise ValueError(f"Входной файл находится в каталоге очищаемых результатов: {source}")
+    for name in generated_files:
+        path = output / name
+        if path.is_dir() and not path.is_symlink():
+            raise ValueError(f"Вместо файла результата найден каталог: {path}")
+
+    output.mkdir(parents=True, exist_ok=True)
+    for name in (*generated_directories, *generated_files):
+        path = output / name
+        if path.is_symlink():
+            path.unlink()
+        elif path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink(missing_ok=True)
+    # The input map (including --map output/map/map.json) has already been
+    # loaded, so the new run always has its own current truth map on disk.
+    save_map(data, output / "map.json")
+
+
+def run_expedition(data: dict, output: Path, observation_config: dict, observation_seed: int,
+                   mineral_catalog: dict, rock_catalog: dict, *, preliminary_collected: bool) -> Path:
+    """Generate all dependent stages after collection is requested, and persist the result."""
     observations = generate_observations(data, observation_config, seed=observation_seed,
                                          mineral_catalog=mineral_catalog)
     recognition = recognize_deposits(observations, mineral_catalog, rock_catalog=rock_catalog)
-    map_path = save_map(data, args.output / "map.json")
-    observation_path = save_observations(observations, args.output / "observations")
-    recognition_path = save_recognition(recognition, args.output / "recognition.json")
-    reconstruction_path = save_recognition(recognition["reconstructed_map"], args.output / "reconstructed_map.json")
-    internal_directory = args.output / "internal"
+    map_path = save_map(data, output / "map.json")
+    observation_path = save_observations(observations, output / "observations")
+    recognition_path = save_recognition(recognition, output / "recognition.json")
+    reconstruction_path = save_recognition(recognition["reconstructed_map"], output / "reconstructed_map.json")
+    internal_directory = output / "internal"
     internal_directory.mkdir(parents=True, exist_ok=True)
     (internal_directory / "expedition_run.json").write_text(
         json.dumps({"map_seed": data["seed"], "observation_seed": observation_seed,
                     "observation_config": observation_config}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    viewer_path = build_viewer(data, args.output / "map_view.html", observations=observations, recognition=recognition,
-                               observation_config=observation_config, observation_seed=observation_seed)
+    viewer_path = build_viewer(data, output / "map_view.html", observations=observations, recognition=recognition,
+                               observation_config=observation_config, observation_seed=observation_seed,
+                               preliminary_collected=preliminary_collected)
 
     dimensions = data["dimensions"]
     statistics = data["statistics"]
@@ -154,7 +212,8 @@ def main() -> None:
     print(f"Результат поиска: {recognition_path}")
     print(f"Реконструированная карта: {reconstruction_path}")
     print(f"Выделено пространственных рудных зон: {recognition['reconstructed_map']['summary']['mineral_zone_count']}")
-    print(f"Просмотр: {viewer_path}")
+    print(f"Просмотр: {viewer_path}", flush=True)
+    return viewer_path
 
 
 if __name__ == "__main__":

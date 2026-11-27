@@ -114,7 +114,70 @@ PRELIMINARY_SCRIPT = r'''
         };
       }
 
-      function drawPreliminaryMap(method, rows, settings, selectedId) {
+      // Interpolate measured values only. The true map is never used by the
+      // cartographic renderer. Cache the raster while selecting survey points.
+      const rasterCache = new WeakMap();
+      function surveyRaster(rows, field, isElevation = false) {
+        if (!rows.length) return '';
+        const cached = rasterCache.get(rows);
+        if (cached?.field === field && cached.length === rows.length) return cached.markup;
+        const nx = Math.max(8, Math.round(54 * Math.min(1, dims.width_m / dims.height_m)));
+        const ny = Math.max(8, Math.round(54 * Math.min(1, dims.height_m / dims.width_m)));
+        const groups = new Map();
+        let low = Infinity, high = -Infinity;
+        for (const row of rows) {
+          const value = row[field];
+          if (!Number.isFinite(value) || !Number.isFinite(row.x_m) || !Number.isFinite(row.y_m)) continue;
+          low = Math.min(low, value); high = Math.max(high, value);
+          // Bound the interpolation cost for large imported surveys.
+          const x = Math.max(0, Math.min(dims.width_m, row.x_m));
+          const y = Math.max(0, Math.min(dims.height_m, row.y_m));
+          const key = Math.min(nx - 1, Math.floor(x / dims.width_m * nx)) + nx * Math.min(ny - 1, Math.floor(y / dims.height_m * ny));
+          const group = groups.get(key) ?? {x: 0, y: 0, value: 0, count: 0};
+          group.x += x; group.y += y; group.value += value; group.count++;
+          groups.set(key, group);
+        }
+        if (!groups.size) return '';
+        const samples = [...groups.values()].map(g => ({x:g.x/g.count, y:g.y/g.count, value:g.value/g.count}));
+        const dx = dims.width_m / nx, dy = dims.height_m / ny;
+        const values = [];
+        for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+          let weighted = 0, weight = 0;
+          for (const sample of samples) {
+            const d = ((x+.5)*dx-sample.x)**2 + ((y+.5)*dy-sample.y)**2;
+            const w = 1 / Math.max(d, 0.01)**2;
+            weighted += sample.value * w; weight += w;
+          }
+          values.push(weighted / weight);
+        }
+        const frame = mapFrame(dims), palette = ['#477581', '#79a785', '#c3c38a', '#eee0c3'];
+        const color = fraction => isElevation
+          ? palette[Math.min(palette.length - 1, Math.floor(fraction * palette.length))]
+          : geophysicalColor(fraction);
+        let markup = '<g data-survey-raster="true" pointer-events="none">';
+        const origin = frame.point(0, 0), step = frame.point(dx, dy);
+        const cellW = step.x - origin.x, cellH = origin.y - step.y;
+        for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+          const value = values[y*nx+x];
+          const fraction = high === low ? .5 : Math.max(0, Math.min(1, (value-low)/(high-low)));
+          const position = frame.point(x*dx, (y+1)*dy);
+          let fill = color(fraction);
+          if (isElevation) {
+            const x1=Math.min(nx-1,x+1), x0=Math.max(0,x-1), y1=Math.min(ny-1,y+1), y0=Math.max(0,y-1);
+            const shade=Math.max(.68,Math.min(1.28,1.05+((values[y*nx+x1]-values[y*nx+x0])/dx+(values[y1*nx+x]-values[y0*nx+x])/dy)/4));
+            fill=rgba(fill,1,shade);
+          }
+          markup += `<rect x="${position.x.toFixed(2)}" y="${position.y.toFixed(2)}" width="${(cellW+.02).toFixed(2)}" height="${(cellH+.02).toFixed(2)}" fill="${fill}"/>`;
+        }
+        markup += '</g>';
+        for (let i=0;i<20;i++) markup += `<rect x="${245+i*8}" y="280" width="8" height="7" fill="${color(i/19)}"/>`;
+        const unit = isElevation ? 'м' : field === 'magnetic_anomaly_nt' ? 'нТл' : 'имп/с';
+        markup += `<text x="241" y="287" text-anchor="end" font-size="10" fill="#62675e">${number(low)}</text><text x="409" y="287" font-size="10" fill="#62675e">${number(high)} ${unit}</text>`;
+        rasterCache.set(rows, {field, length: rows.length, markup});
+        return markup;
+      }
+
+      function drawPreliminaryMap(method, rows, settings, selectedId, terrainRows) {
         const {point, markup} = mapFrame(dims);
         const radius = Math.max(1.25, Math.min(4.25, 85 / Math.sqrt(rows.length || 1)));
         const selectedRow = rows.find(row => row.observation_id === selectedId);
@@ -124,35 +187,35 @@ PRELIMINARY_SCRIPT = r'''
           return `class="hole-dot" role="button" tabindex="0" aria-label="${escape(row.observation_id)}" aria-pressed="${selected}" data-observation="${escape(row.observation_id)}" cx="${x}" cy="${y}" r="${selected ? Math.max(6, size + 2) : size}" stroke="${selected ? '#a35a35' : border}" stroke-width="${selected ? 3 : 1}"`;
         };
         if (method === 'outcrops') {
-          element('outcropMap').innerHTML = markup + points.map(row => {
+          element('outcropMap').innerHTML = markup + surveyRaster(terrainRows, 'surface_elevation_m', true) + points.map(row => {
             const {x, y} = point(row.x_m, row.y_m);
             const color = rockById[row.observed_rock_id]?.color || '#355d48';
             return `<circle ${attributes(row, x, y, 4.5, '#30382f')} fill="${escape(color)}"><title>${escape(row.observation_id)} · ${escape(row.observed_rock_name)} · ${number(row.surface_elevation_m)} м</title></circle>`;
           }).join('');
-          element('outcropCaption').textContent = `${number(rows.length)} обнажений на ${number(settings.points?.length ?? settings.point_count ?? rows.length)} обследованных точках. Цвет соответствует наблюдённой породе.`;
+          element('outcropCaption').textContent = `${number(rows.length)} обнажений на ${number(settings.points?.length ?? settings.point_count ?? rows.length)} обследованных точках. Цвет точек соответствует наблюдённой породе. Фон — интерполяция измеренных высот (если есть).`;
         } else if (method === 'terrain_survey') {
           const counts = new Map();
-          element('terrainSurveyMap').innerHTML = markup + points.map(row => {
+          element('terrainSurveyMap').innerHTML = markup + surveyRaster(rows, 'surface_elevation_m', true) + points.map(row => {
             const {x, y} = point(row.x_m, row.y_m);
             const type = terrainTypes[row.terrain_type] || terrainTypes.undetermined;
             counts.set(type.label, (counts.get(type.label) || 0) + 1);
             return `<circle ${attributes(row, x, y, radius)} fill="${type.color}"><title>${escape(row.observation_id)} · ${type.label} · ${number(row.surface_elevation_m)} м</title></circle>`;
           }).join('');
-          element('terrainSurveyCaption').textContent = `${number(rows.length)} точек · порог уклона ${settings.slope_threshold_deg == null?'не задан':number(settings.slope_threshold_deg)+'°'} · порог относительной высоты ${settings.local_relief_threshold_m == null?'не задан':number(settings.local_relief_threshold_m)+' м'}`;
+          element('terrainSurveyCaption').textContent = `Фон — интерполяция высот; точки — типы рельефа. ${number(rows.length)} точек · порог уклона ${settings.slope_threshold_deg == null?'не задан':number(settings.slope_threshold_deg)+'°'} · порог относительной высоты ${settings.local_relief_threshold_m == null?'не задан':number(settings.local_relief_threshold_m)+' м'}`;
           element('terrainSurveyLegend').innerHTML = Object.values(terrainTypes).filter(type => counts.has(type.label))
             .map(type => `<span style="color:${type.color}">● ${type.label} · ${number(counts.get(type.label))}</span>`).join(' &nbsp; ');
         } else {
           const {field, label, unit} = geophysicalChannels[surveyChannels[method]];
           element('geophysicalHeading').textContent = label;
           const values = rows.map(row => row[field]);
-          const minimum = Math.min(...values), maximum = Math.max(...values);
-          element('geophysicalMap').innerHTML = markup + points.map(row => {
+          const minimum = values.reduce((a,b)=>Math.min(a,b), Infinity), maximum = values.reduce((a,b)=>Math.max(a,b), -Infinity);
+          element('geophysicalMap').innerHTML = markup + surveyRaster(rows, field) + points.map(row => {
             const {x, y} = point(row.x_m, row.y_m);
             const scaled = minimum === maximum ? .5 : (row[field] - minimum) / (maximum - minimum);
-            return `<circle ${attributes(row, x, y, radius)} fill="${geophysicalColor(scaled)}"><title>${escape(row.observation_id)} · ${label} ${number(row[field])} ${unit}</title></circle>`;
+            return `<circle ${attributes(row, x, y, radius, '#ffffff')} fill="${geophysicalColor(scaled)}" stroke-opacity=".85"><title>${escape(row.observation_id)} · ${label} ${number(row[field])} ${unit}</title></circle>`;
           }).join('');
           element('geophysicalCaption').textContent = rows.length
-            ? `${number(rows.length)} точек · от ${number(minimum)} ${unit} (синий) до ${number(maximum)} ${unit} (оранжевый)`
+            ? `Интерполяция измерений · ${number(rows.length)} точек · от ${number(minimum)} ${unit} (синий) до ${number(maximum)} ${unit} (оранжевый)`
             : 'Для этого канала пока нет измерений.';
         }
       }
@@ -179,20 +242,38 @@ PRELIMINARY_SCRIPT = r'''
         const manual = element('openManualPreliminary');
         const status = element('preliminaryStatus');
         if(!observations)manual.classList.add('hidden');
-        if(!Object.keys(enabled).length){
+        if(!Object.keys(enabled).length && !OBSERVATION_DATA){
           start.classList.add('hidden');
           status.textContent='Автоматическая съёмка отключена. Можно загрузить свои наблюдения вручную.';
         }
         if(!keys.length)return;
-        function openSections() {
+        function openSections(collect = false) {
           if (start.disabled) return;
           start.disabled = true;
           manual.disabled = true;
           let results;
           try {
-            // The archived measurements and manually imported records are the
-            // authoritative observations when an expedition already exists.
-            results = observations ? observations.tables : collectSurvey(plan);
+            // Opening the manual workspace never samples the true map.
+            // Historical exports contain measurements from an earlier run.
+            if (collect && !OBSERVATION_DATA) {
+              const generated = collectSurvey(plan);
+              if (observations) {
+                for (const [table, rows] of Object.entries(generated)) {
+                  observations.tables[table] = rows;
+                  observations.geojson[table] = surveyGeoJson(table, rows);
+                }
+                Object.assign(observations.summary, {
+                  magnetic_observation_count: (generated.magnetic_observations || []).length,
+                  gamma_observation_count: (generated.gamma_observations || []).length,
+                  terrain_observation_count: (generated.terrain_observations || []).length,
+                  outcrop_count: (generated.outcrop_observations || []).length,
+                  geophysical_observation_count: new Set([...(generated.magnetic_observations || []), ...(generated.gamma_observations || [])].map(row=>row.station_id)).size
+                });
+              }
+              results = observations?.tables ?? generated;
+            } else {
+              results = observations?.tables ?? {};
+            }
           } catch {
             start.disabled = false;
             manual.disabled = false;
@@ -213,7 +294,7 @@ PRELIMINARY_SCRIPT = r'''
                                          page, 'Для этого раздела пока нет наблюдений');
           }
           function renderMap() {
-            drawPreliminaryMap(active, activeRows(), settings[active] ?? settings[methods[active].archiveSetting] ?? {}, selectedPoint());
+            drawPreliminaryMap(active, activeRows(), settings[active] ?? settings[methods[active].archiveSetting] ?? {}, selectedPoint(), results.terrain_observations || []);
             const row = selectedRow();
             const detailFields = {
               magnetic_observations: ['magnetic_anomaly_nt', 'magnetic_sigma_nt'],
@@ -282,8 +363,29 @@ PRELIMINARY_SCRIPT = r'''
           element('preliminaryContent').classList.remove('hidden');
           buttons[keys[0]].focus();
         }
-        start.addEventListener('click',openSections);
-        manual.addEventListener('click',openSections);
+        if (OBSERVATION_DATA && !PRELIMINARY_COLLECTED) {
+          start.textContent = 'Открыть сохранённые наблюдения';
+          status.textContent = 'Это сохранённый результат экспедиции. Откройте наблюдения для просмотра карт и измерений.';
+        }
+        start.addEventListener('click', async () => {
+          if (!COLLECT_ENDPOINT) {
+            openSections(true);
+            return;
+          }
+          if (start.disabled) return;
+          start.disabled = manual.disabled = true;
+          status.textContent = 'Выполняется предварительная съёмка, затем рассчитывается план бурения и результаты поиска…';
+          try {
+            const response = await fetch(COLLECT_ENDPOINT, {method:'POST'});
+            if (!response.ok) throw new Error('Ошибка сбора наблюдений');
+            location.reload();
+          } catch (error) {
+            start.disabled = manual.disabled = false;
+            status.textContent = 'Не удалось собрать наблюдения. Проверьте сообщения в терминале и повторите попытку.';
+          }
+        });
+        manual.addEventListener('click', () => openSections(false));
+        if (PRELIMINARY_COLLECTED) openSections(false);
       }
       initPreliminary();
 '''

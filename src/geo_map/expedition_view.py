@@ -24,6 +24,9 @@ WORKSPACE_STYLES = r'''
     .tab-number { font: 11px/1 var(--mono); color: #c3c9b8; letter-spacing: .04em; }
     .workspace-tab[aria-selected="true"] .tab-number { color: var(--highlight); }
     .workspace-page { flex: 1 1 0; min-height: 0; min-width: 0; overflow: auto; padding: 26px; }
+    #preliminaryPanel { display: flex; flex-direction: column; }
+    #preliminaryEmpty, #preliminaryContent { flex: none; }
+    #preliminaryEmpty { margin: auto; }
     .expedition-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding-bottom: 16px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
     .expedition-heading > div { flex: 1 1 280px; min-width: 0; }
     .expedition-heading h2 { margin: 0 0 6px; font: 500 28px/1.2 var(--heading); color: var(--ink); }
@@ -140,7 +143,7 @@ WORKSPACE_PANELS = r'''
     </div>
   </section>
   <section id="expeditionPanel" class="workspace-page hidden" role="tabpanel" aria-labelledby="tab-expedition">
-    <div id="expeditionEmpty" class="empty-card hidden"><h2>Экспедиция ещё не создана</h2><p>Наблюдения появятся после генерации разведочной экспедиции.</p></div>
+    <div id="expeditionEmpty" class="empty-card hidden"><h2>Экспедиция ещё не создана</h2><p>Сначала соберите предварительные наблюдения на вкладке 02.</p></div>
     <div id="expeditionContent">
       <div class="expedition-heading">
         <div><h2 id="expeditionTitle"></h2><p id="expeditionSubtitle"></p></div>
@@ -261,7 +264,7 @@ WORKSPACE_SCRIPT = r'''
       __IMPORT_ENGINE__
       __IMPORT_UI__
       __PRELIMINARY_SCRIPT__
-      if (!observations) {
+      if (!OBSERVATION_DATA) {
         document.getElementById('expeditionEmpty').classList.remove('hidden');
         document.getElementById('expeditionContent').classList.add('hidden');
         return;
@@ -592,7 +595,7 @@ WORKSPACE_SCRIPT = r'''
         refreshFieldMethodRecords();page=0;renderTable();
       };
       renderRecognition(RECOGNITION_DATA);
-    })(OBSERVATION_DATA);
+    })(OBSERVATION_DATA ?? MANUAL_OBSERVATION_DATA);
 '''
 
 WORKSPACE_STYLES += METHODS_STYLES

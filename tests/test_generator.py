@@ -430,7 +430,10 @@ class GeneratorTests(unittest.TestCase):
             self.assertIn("усиленные линии — 50 м", html)
             self.assertIn("mineral.grade_unit", html)
             self.assertIn('"schema_version":"2.2"', html)
-            self.assertIn("Рельеф и обнажения", html)
+            self.assertIn("Рельеф и обнажения пород", html)
+            self.assertNotIn('<option value="terrain">', html)
+            self.assertNotIn('<option value="magnetic"', html)
+            self.assertNotIn('<option value="gamma"', html)
             self.assertIn('"map_kind":"synthetic_ground_truth"', html)
 
 

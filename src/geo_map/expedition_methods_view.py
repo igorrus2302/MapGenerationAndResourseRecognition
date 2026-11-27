@@ -8,6 +8,7 @@ METHODS_STYLES = r'''
     .method-overview { margin-bottom: 16px; }
     .method-overview p { color: var(--muted); font-size: 12px; line-height: 1.7; }
     .method-map { width: 100%; height: 300px; display: block; }
+    #preliminaryPanel .method-map { height: clamp(320px, 62vh, 640px); }
     .method-toolbar { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
     .method-toolbar select { width: auto; max-width: min(100%, 260px); }
     .method-profile { width: 100%; height: 190px; display: block; }
@@ -55,12 +56,12 @@ PRELIMINARY_METHODS_HTML = r'''
         <div id="preliminaryPointDetail" class="selection-detail" aria-live="polite"></div>
       </div>
       <div id="outcropOverview" class="panel-card method-overview hidden">
-        <h3>Наблюдённые обнажения</h3>
+        <h3>Рельеф и обнажения пород</h3>
         <div class="muted" id="outcropCaption"></div>
         <svg id="outcropMap" class="method-map" viewBox="0 0 650 300" role="group" aria-label="Точки наблюдения обнажений"></svg>
       </div>
       <div id="terrainSurveyOverview" class="panel-card method-overview hidden">
-        <h3>Типы рельефа по съёмке высот</h3>
+        <h3>Карта рельефа и типы поверхности</h3>
         <div class="muted" id="terrainSurveyCaption"></div>
         <svg id="terrainSurveyMap" class="method-map" viewBox="0 0 650 300" role="group" aria-label="Типы рельефа в точках съёмки"></svg>
         <p id="terrainSurveyLegend"></p>

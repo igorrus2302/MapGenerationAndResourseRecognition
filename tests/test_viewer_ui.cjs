@@ -1,5 +1,5 @@
 // Source-level interaction checks. DOM doubles do not validate visual layout.
-// Run after main.py: node tests/test_viewer_ui.cjs output/map/map_view.html
+// Run after main.py --batch or after collection: node tests/test_viewer_ui.cjs output/map/map_view.html
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
@@ -14,6 +14,8 @@ const style = html.match(/<style>([\s\S]*?)<\/style>/)[1];
 assert.match(style, /\.workspace-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(5, minmax\(0, 1fr\)\)/);
 assert.match(style, /\.workspace-tab\[aria-selected="true"\]\s*\{[^}]*border-top-color:\s*var\(--highlight\)/);
 assert.match(style, /\.workspace-page\s*\{[^}]*overflow:\s*auto/);
+assert.match(style, /#preliminaryPanel\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/);
+assert.match(style, /#preliminaryEmpty\s*\{[^}]*margin:\s*auto;/);
 assert.match(style, /\.expedition-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/);
 assert.match(style, /\.workspace-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
 assert.match(style, /\.workspace-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
@@ -107,32 +109,19 @@ assert.equal(get('seedValue').textContent, vm.runInContext('MAP_SEED_TEXT', cont
 assert.doesNotMatch(html, /class="status-pill"/);
 const observations = vm.runInContext('OBSERVATION_DATA', context);
 const preliminaryPlan = vm.runInContext('PRELIMINARY_PLAN', context);
-if (vm.runInContext('Boolean(MAP_DATA.terrain)', context)) {
-  const canvas = get('mapCanvas');
-  canvas.clientWidth = 960;
-  canvas.clientHeight = 650;
-  canvas.getBoundingClientRect = () => ({left: 0, top: 0});
-  const target = vm.runInContext(`(() => {
-    state.mode = 'terrain'; updateControls(); render();
-    const {geometry} = state.hitMap;
-    const cell = cells.find(item => item.intervals[0].rock_id !== terrain.surface_cover_rock_id) ?? cells[0];
-    return {name: rockById[cell.intervals[0].rock_id].name,
-      clientX: geometry.left + (cell.x_index + .5) * dims.cell_size_m * geometry.cellSize,
-      clientY: geometry.top + (dims.height_cells - cell.y_index - .5) * dims.cell_size_m * geometry.cellSize};
-  })()`, context);
-  canvas.fire('click', target);
-  assert.ok(get('cellInfo').innerHTML.includes(target.name));
-  assert.ok(get('cellInfo').innerHTML.includes('Отметка поверхности'));
-  vm.runInContext("state.mode = 'vertical-x'; updateControls(); render(); state.mode = '3d'; updateControls(); render()", context);
-  if (vm.runInContext('Boolean(MAP_DATA.geophysics)', context)) {
-    for (const mode of ['magnetic', 'gamma']) {
-      vm.runInContext(`state.mode = '${mode}'; updateControls(); render()`, context);
-      canvas.fire('click', target);
-      assert.match(get('cellInfo').innerHTML, /Магнитная аномалия/);
-      assert.match(get('cellInfo').innerHTML, /Гамма-фон/);
-    }
-  }
-}
+const modeOptions = [...get('modeSelect').innerHTML.matchAll(/<option value="([^"]+)"/g)].map(match => match[1]);
+assert.deepEqual(modeOptions, ['3d', 'vertical-x', 'vertical-y', 'horizontal']);
+assert.equal(nodes.has('truthMagneticOption'), false);
+assert.equal(nodes.has('truthGammaOption'), false);
+const canvas = get('mapCanvas');
+canvas.clientWidth = 960;
+canvas.clientHeight = 650;
+canvas.getBoundingClientRect = () => ({left: 0, top: 0});
+vm.runInContext("state.mode = 'vertical-x'; updateControls(); render(); state.mode = '3d'; updateControls(); render()", context);
+const preliminaryCollected = vm.runInContext('PRELIMINARY_COLLECTED', context);
+const collectEndpoint = vm.runInContext('COLLECT_ENDPOINT', context);
+const manualData = vm.runInContext('MANUAL_OBSERVATION_DATA', context);
+if (!observations) assert.ok(Object.values(manualData.tables).every(rows=>rows.length===0));
 
 assert.equal(location.hash, '#truth');
 assert.equal(get('truthPanel').classList.contains('hidden'), false);
@@ -146,26 +135,56 @@ get('tab-preliminary').click();
 assert.equal(location.hash, '#preliminary');
 assert.equal(get('preliminaryPanel').classList.contains('hidden'), false);
 assert.equal(get('expeditionPanel').classList.contains('hidden'), true);
-assert.equal(get('preliminaryEmpty').classList.contains('hidden'), false);
+assert.equal(get('preliminaryEmpty').classList.contains('hidden'), preliminaryCollected);
 assert.match(html, /<div class="empty-card-actions">\s*<button id="collectPreliminary"[^>]*>[\s\S]*?<\/button>\s*<button id="openManualPreliminary"[^>]*>[\s\S]*?<\/button>\s*<\/div>/);
 assert.match(html, /\.empty-card-actions\s*\{[^}]*display:\s*grid;[^}]*gap:\s*12px;/);
 assert.match(html, /\.empty-card-actions button\s*\{[^}]*width:\s*100%;[^}]*white-space:\s*normal;/);
-assert.equal(get('preliminaryContent').classList.contains('hidden'), true);
-assert.equal(get('preliminarySections').children.length, 0);
-assert.equal(get('preliminaryTableBody').innerHTML, '');
-assert.equal(get('geophysicalMap').innerHTML, '');
-assert.equal(get('terrainSurveyMap').innerHTML, '');
-assert.equal(get('outcropMap').innerHTML, '');
+assert.equal(get('preliminaryContent').classList.contains('hidden'), !preliminaryCollected);
+if (!preliminaryCollected) {
+  assert.equal(get('preliminarySections').children.length, 0);
+  assert.equal(get('preliminaryTableBody').innerHTML, '');
+  assert.equal(get('geophysicalMap').innerHTML, '');
+  assert.equal(get('terrainSurveyMap').innerHTML, '');
+  assert.equal(get('outcropMap').innerHTML, '');
+}
 const surveySettings = preliminaryPlan?.methods ?? observations?.plan?.methods ?? {};
 const geophysicalTables = ['magnetic_observations', 'gamma_observations'];
 const hasMethod = key => Boolean(preliminaryPlan ? surveySettings[key] :
   geophysicalTables.includes(key) ? surveySettings.geophysical_survey?.enabled && observations.table_fields[key] :
   surveySettings[key]?.enabled);
 const hasSurvey = [...geophysicalTables, 'terrain_survey', 'outcrops'].some(hasMethod);
-assert.equal(get('collectPreliminary').classList.contains('hidden'), !hasSurvey);
-if (hasSurvey) get('collectPreliminary').click();
-else if (observations) get('openManualPreliminary').click();
-const openedPreliminary=hasSurvey||Boolean(observations);
+assert.equal(get('collectPreliminary').classList.contains('hidden'), !hasSurvey && !observations);
+if (collectEndpoint) {
+  assert.equal(observations, null);
+  assert.equal(vm.runInContext('RECOGNITION_DATA', context), null);
+  assert.ok(Object.values(surveySettings).every(method=>!method.points));
+  if (process.argv.includes('--manual')) {
+    get('openManualPreliminary').click();
+    assert.equal(get('preliminaryContent').classList.contains('hidden'), false);
+    assert.equal(get('preliminaryCount').textContent, '0 записей');
+    assert.ok(Object.values(manualData.tables).every(rows=>rows.length===0));
+    assert.doesNotMatch(get('geophysicalMap').innerHTML, /data-survey-raster/);
+  } else {
+    let requested;
+    context.fetch = (url, options) => {
+      requested = [url, options.method];
+      return Promise.resolve({ok:true});
+    };
+    location.reload = () => {};
+    get('collectPreliminary').click();
+    assert.deepEqual(requested, [collectEndpoint, 'POST']);
+    assert.equal(get('collectPreliminary').disabled, true);
+    assert.ok(Object.values(manualData.tables).every(rows=>rows.length===0));
+  }
+  assert.equal(get('expeditionContent').classList.contains('hidden'), true);
+  console.log('Pending workspace: no observations before explicit collection: OK');
+  process.exit(0);
+}
+if (!preliminaryCollected) {
+  if (hasSurvey || observations) get('collectPreliminary').click();
+  else if (manualData) get('openManualPreliminary').click();
+}
+const openedPreliminary=preliminaryCollected||hasSurvey||Boolean(observations||manualData);
 assert.equal(get('preliminaryEmpty').classList.contains('hidden'), openedPreliminary);
 assert.equal(get('preliminaryContent').classList.contains('hidden'), !openedPreliminary);
 get('tab-expedition').click();
@@ -525,6 +544,7 @@ if (!observations) {
     const terrain = observations.tables.terrain_observations;
     assert.ok(!get('terrainSurveyMap').innerHTML.includes('NaN'));
     assert.equal((get('terrainSurveyMap').innerHTML.match(/<circle/g) || []).length, terrain.length);
+    if (terrain.length) assert.match(get('terrainSurveyMap').innerHTML, /data-survey-raster/);
     assert.match(get('preliminaryTableHead').innerHTML, /Тип рельефа/);
     checkPreliminarySelection('terrainSurveyMap', terrain);
     get('downloadPreliminaryGeoJson').click();
@@ -537,7 +557,10 @@ if (!observations) {
     assert.equal((get('geophysicalMap').innerHTML.match(/<circle/g) || []).length, field.length);
     assert.ok(!get('geophysicalMap').innerHTML.includes('NaN'));
     const magnetic = table === 'magnetic_observations';
-    if (field.length) assert.match(get('geophysicalMap').innerHTML, magnetic ? /нТл/ : /имп\/с/);
+    if (field.length) {
+      assert.match(get('geophysicalMap').innerHTML, magnetic ? /нТл/ : /имп\/с/);
+      assert.match(get('geophysicalMap').innerHTML, /data-survey-raster/);
+    }
     assert.match(get('preliminaryTableHead').innerHTML, magnetic ? /magnetic_anomaly_nt/ : /gamma_count_rate_cps/);
     assert.doesNotMatch(get('preliminaryTableHead').innerHTML, magnetic ? /gamma_count_rate_cps/ : /magnetic_anomaly_nt/);
     checkPreliminarySelection('geophysicalMap', field);

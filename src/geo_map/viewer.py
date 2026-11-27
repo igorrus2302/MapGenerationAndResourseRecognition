@@ -9,7 +9,7 @@ from typing import Any
 from .expedition_view import WORKSPACE_PANELS, WORKSPACE_SCRIPT, WORKSPACE_STYLES, WORKSPACE_TABS
 from .geophysical_observations import GEOPHYSICAL_TABLES, LEGACY_GEOPHYSICAL_TABLE, split_legacy_geophysical_bundle
 from .observation_models import EXTRA_TABLE_FIELDS, prepare_preliminary_survey
-from .observations import with_magnetic_log_schema
+from .observations import TABLE_FIELDS, with_magnetic_log_schema
 
 HTML_TEMPLATE = r'''<!doctype html>
 <html lang="ru">
@@ -142,9 +142,6 @@ HTML_TEMPLATE = r'''<!doctype html>
         <h2>Режим просмотра</h2>
         <select id="modeSelect">
           <option value="3d">3D-блок</option>
-          <option value="terrain">Рельеф и обнажения</option>
-          <option value="magnetic" id="truthMagneticOption">Магнитное поле</option>
-          <option value="gamma" id="truthGammaOption">Гамма-фон</option>
           <option value="vertical-x">Разрез по оси X</option>
           <option value="vertical-y">Разрез по оси Y</option>
           <option value="horizontal">Разрез по оси Z</option>
@@ -213,6 +210,9 @@ HTML_TEMPLATE = r'''<!doctype html>
     const OBSERVATION_IMPORT_XLSX = __OBSERVATION_IMPORT_XLSX__;
     const RECOGNITION_DATA = __RECOGNITION_DATA__;
     const PRELIMINARY_PLAN = __PRELIMINARY_PLAN__;
+    const MANUAL_OBSERVATION_DATA = __MANUAL_OBSERVATION_DATA__;
+    const PRELIMINARY_COLLECTED = __PRELIMINARY_COLLECTED__;
+    const COLLECT_ENDPOINT = __COLLECT_ENDPOINT__;
 
     const canvas = document.getElementById('mapCanvas');
     const ctx = canvas.getContext('2d');
@@ -365,8 +365,6 @@ HTML_TEMPLATE = r'''<!doctype html>
       if (document.getElementById('truthPanel').classList.contains('hidden')) return;
       clearCanvas();
       if (state.mode === '3d') render3D();
-      else if (state.mode === 'terrain') renderTerrain();
-      else if (geophysicalChannels[state.mode]) renderGeophysicalField();
       else if (state.mode === 'horizontal') renderHorizontal();
       else renderVertical(state.mode === 'vertical-x' ? 'x' : 'y');
     }
@@ -599,63 +597,8 @@ HTML_TEMPLATE = r'''<!doctype html>
       return Math.max(.68, Math.min(1.28, 1.05 + (dx + dy) / (4 * dims.cell_size_m)));
     }
 
-    function renderTerrain() {
-      const geometry = gridGeometry(dims.width_m, dims.height_m);
-      const size = geometry.cellSize * dims.cell_size_m;
-      const low = terrain?.min_elevation_m ?? 0, high = terrain?.max_elevation_m ?? 0;
-      const palette = ['#477581', '#79a785', '#c3c38a', '#eee0c3'];
-      const exposure = cell => terrain && cell && cell.intervals[0].rock_id !== terrain.surface_cover_rock_id;
-      for (const cell of cells) {
-        const fraction = ((cell.surface_elevation_m ?? 0) - low) / (high - low || 1);
-        const swatch = palette[Math.min(palette.length - 1, Math.floor(fraction * palette.length))];
-        const left = geometry.left + cell.x_index * size;
-        const top = geometry.top + (dims.height_cells - 1 - cell.y_index) * size;
-        const rock = rockById[cell.intervals[0].rock_id];
-        const shade = surfaceShade(cell);
-        ctx.fillStyle = rgba(swatch, 1, shade);
-        ctx.fillRect(left, top, size + .3, size + .3);
-        if (exposure(cell) && state.visibleRocks.has(rock.id)) {
-          ctx.fillStyle = rgba(rock.color, 1, shade);
-          ctx.fillRect(left, top, size + .3, size + .3);
-        }
-      }
-      drawGridFrame({...geometry, invertY: true}, 'Рельеф · коренные породы выделены цветом легенды');
-      const legendY = geometry.top + geometry.gridHeight + 33;
-      for (const [index, color] of palette.entries()) {
-        ctx.fillStyle = color;
-        ctx.fillRect(geometry.left + index * 24, legendY, 24, 7);
-      }
-      ctx.fillStyle = '#30382f';
-      ctx.fillText(`Отметки от ${low} до ${high} м`, geometry.left + 105, legendY + 7);
-      state.hitMap = {type: 'terrain', geometry};
-    }
-
     function geophysicalColor(fraction) {
       return `hsl(${232 - 212 * fraction}, 67%, ${42 + 11 * fraction}%)`;
-    }
-
-    function renderGeophysicalField() {
-      const {field, label, unit} = geophysicalChannels[state.mode];
-      const range = MAP_DATA.geophysics?.ranges[field];
-      if (!range) return;
-      const [low, high] = range;
-      const geometry = gridGeometry(dims.width_m, dims.height_m);
-      const size = geometry.cellSize * dims.cell_size_m;
-      for (const cell of cells) {
-        const fraction = high === low ? .5 : (cell.geophysical_fields[field] - low) / (high - low);
-        ctx.fillStyle = geophysicalColor(fraction);
-        ctx.fillRect(geometry.left + cell.x_index * size,
-                     geometry.top + (dims.height_cells - 1 - cell.y_index) * size, size + .3, size + .3);
-      }
-      drawGridFrame({...geometry, invertY: true}, `${label} · ${unit}`);
-      const legendY = geometry.top + geometry.gridHeight + 33;
-      for (let index = 0; index < 10; index++) {
-        ctx.fillStyle = geophysicalColor(index / 9);
-        ctx.fillRect(geometry.left + index * 10, legendY, 10, 7);
-      }
-      ctx.fillStyle = '#30382f';
-      ctx.fillText(`${low} … ${high} ${unit}`, geometry.left + 110, legendY + 7);
-      state.hitMap = {type: 'terrain', geometry};
     }
 
     function renderVertical(axis) {
@@ -766,8 +709,6 @@ HTML_TEMPLATE = r'''<!doctype html>
       document.getElementById('view3dControls').classList.toggle('hidden', !is3D);
       document.getElementById('depthControls').classList.toggle('hidden', !isHorizontal);
       document.getElementById('sliceControls').classList.toggle('hidden', !isVertical);
-      document.getElementById('truthMagneticOption').disabled = !MAP_DATA.geophysics;
-      document.getElementById('truthGammaOption').disabled = !MAP_DATA.geophysics;
       depthSlider.min = String(highestDepth);
       depthSlider.max = String(dims.depth_m - 1);
       depthSlider.value = String(state.depthM);
@@ -784,16 +725,13 @@ HTML_TEMPLATE = r'''<!doctype html>
       }
       const titles = {
         '3d': 'Трёхмерная блочная модель',
-        'terrain': 'Рельеф и обнажения',
         'horizontal': 'Разрез по оси Z — плоскость X–Y',
         'vertical-x': 'Разрез по оси X — плоскость Y–Z',
         'vertical-y': 'Разрез по оси Y — плоскость X–Z'
       };
-      viewTitle.textContent = titles[state.mode] || geophysicalChannels[state.mode]?.label;
+      viewTitle.textContent = titles[state.mode];
       canvasHint.textContent = is3D
         ? 'Перетаскивайте мышью для вращения, колесом меняйте масштаб.'
-        : geophysicalChannels[state.mode] ? 'Выберите точку, чтобы увидеть истинные значения полей на поверхности.'
-        : state.mode === 'terrain' ? 'Выберите точку, чтобы увидеть отметку высоты и породу на поверхности.'
         : 'Выбор — 1 м; линии сетки — 10 м, усиленные линии — 50 м.';
       canvas.style.cursor = is3D ? 'grab' : 'crosshair';
       requestRender();
@@ -831,7 +769,6 @@ HTML_TEMPLATE = r'''<!doctype html>
           ${mineralRows}
           <span>Плотность</span><b>${interval.properties.density_g_cm3} г/см³</b>
           <span>Пористость</span><b>${interval.properties.porosity_percent} %</b>
-          ${cell.geophysical_fields ? `<span>Магнитная аномалия</span><b>${cell.geophysical_fields.magnetic_anomaly_nt} нТл</b><span>Гамма-фон</span><b>${cell.geophysical_fields.gamma_count_rate_cps} имп/с</b>` : ''}
         </div>`;
     }
 
@@ -850,12 +787,6 @@ HTML_TEMPLATE = r'''<!doctype html>
           Math.floor(row / dims.cell_size_m)
         );
         showCellInfo(cell, state.hitMap.depthM, column, row);
-        return;
-      }
-      if (state.hitMap.type === 'terrain') {
-        const y = dims.height_m - 1 - row;
-        const cell = cellAt(Math.floor(column / dims.cell_size_m), Math.floor(y / dims.cell_size_m));
-        showCellInfo(cell, -(cell.surface_elevation_m ?? 0), column, y);
         return;
       }
       const depthM = highestDepth + row;
@@ -964,9 +895,29 @@ HTML_TEMPLATE = r'''<!doctype html>
 '''
 
 
+def _manual_observation_bundle(data: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    """Empty import workspace: schema and expedition settings, no observations."""
+    dims = data["dimensions"]
+    return {
+        "schema_version": "1.9", "data_kind": "exploration_observations",
+        "campaign": {**{key: config[key] for key in ("campaign_id", "title", "date")},
+                     "coordinate_system": "local_cartesian",
+                     "width_m": dims["width_m"], "height_m": dims["height_m"]},
+        "plan": {"layout": config["drilling"].get("layout", "grid"),
+                 "sample_length_m": config["drilling"]["sample_length_m"],
+                 "borehole_path": "straight", "borehole_depth_reference": "measured_depth_m",
+                 "ideal": config.get("ideal", False), "analytes": config["analytes"],
+                 "methods": {name: config.get(name, {}) for name in
+                             ("geophysical_survey", "terrain_survey", "outcrops", "surface_geochemistry")}},
+        "tables": {name: [] for name in TABLE_FIELDS}, "table_fields": TABLE_FIELDS,
+        "summary": {}, "rock_catalog": [], "geojson": {}, "borehole_sources": [], "notes": [],
+    }
+
+
 def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[str, Any] | None = None,
                  recognition: dict[str, Any] | None = None, observation_config: dict[str, Any] | None = None,
-                 observation_seed: int | None = None) -> Path:
+                 observation_seed: int | None = None, collect_endpoint: str | None = None,
+                 preliminary_collected: bool = False) -> Path:
     """Create an offline workspace for truth, surveys, fieldwork, recognition and comparison."""
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -984,10 +935,22 @@ def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[s
     preliminary_plan = None
     if observation_config is not None and not legacy_survey:
         seed = data.get("seed", 0) if observation_seed is None else observation_seed
-        preliminary_plan = prepare_preliminary_survey(data, observation_config, seed)
+        if collect_endpoint:
+            # The server prepares sampling coordinates and reads the true map
+            # only after the user has requested collection.
+            methods = {}
+            if observation_config.get("geophysical_survey", {}).get("enabled") and "geophysics" in data:
+                methods.update({table: observation_config["geophysical_survey"] for table in GEOPHYSICAL_TABLES.values()})
+            for name in ("terrain_survey", "outcrops"):
+                if observation_config.get(name, {}).get("enabled"):
+                    methods[name] = observation_config[name]
+            preliminary_plan = {"methods": methods}
+        else:
+            preliminary_plan = prepare_preliminary_survey(data, observation_config, seed)
         preliminary_plan["table_fields"] = {
             name: EXTRA_TABLE_FIELDS[name] for name in (*GEOPHYSICAL_TABLES.values(), "terrain_observations", "outcrop_observations")
         }
+    manual_bundle = _manual_observation_bundle(data, observation_config) if observations is None and observation_config is not None else None
     embedded_plan = json.dumps(preliminary_plan, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
     replacements = {
         "__WORKSPACE_STYLES__": WORKSPACE_STYLES,
@@ -1006,7 +969,10 @@ def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[s
                          "__OBSERVATION_IMPORT_ROCKS__": embedded_rocks,
                          "__OBSERVATION_IMPORT_XLSX__": json.dumps(template_bytes),
                          "__MAP_DATA__": embedded, "__MAP_SEED_TEXT__": json.dumps(str(data.get("seed", 0))).replace("</", "<\\/"),
-                         "__PRELIMINARY_PLAN__": embedded_plan}
+                         "__PRELIMINARY_PLAN__": embedded_plan,
+                         "__MANUAL_OBSERVATION_DATA__": json.dumps(manual_bundle, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/"),
+                         "__PRELIMINARY_COLLECTED__": json.dumps(preliminary_collected),
+                         "__COLLECT_ENDPOINT__": json.dumps(collect_endpoint)}
     html = re.sub("|".join(data_replacements), lambda match: data_replacements[match.group()], html)
     output_path.write_text(html, encoding="utf-8")
     return output_path
