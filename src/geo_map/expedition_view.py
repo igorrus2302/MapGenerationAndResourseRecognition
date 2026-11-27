@@ -27,6 +27,9 @@ WORKSPACE_STYLES = r'''
     #preliminaryPanel { display: flex; flex-direction: column; }
     #preliminaryEmpty, #preliminaryContent { flex: none; }
     #preliminaryEmpty { margin: auto; }
+    #expeditionPanel { display: flex; flex-direction: column; }
+    #expeditionEmpty, #expeditionContent { flex: none; }
+    #expeditionEmpty { margin: auto; }
     .expedition-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding-bottom: 16px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
     .expedition-heading > div { flex: 1 1 280px; min-width: 0; }
     .expedition-heading h2 { margin: 0 0 6px; font: 500 28px/1.2 var(--heading); color: var(--ink); }
@@ -143,7 +146,11 @@ WORKSPACE_PANELS = r'''
     </div>
   </section>
   <section id="expeditionPanel" class="workspace-page hidden" role="tabpanel" aria-labelledby="tab-expedition">
-    <div id="expeditionEmpty" class="empty-card hidden"><h2>Экспедиция ещё не создана</h2><p>Сначала соберите предварительные наблюдения на вкладке 02.</p></div>
+    <div id="expeditionEmpty" class="empty-card hidden">
+      <h2>Разведочная экспедиция</h2>
+      <p id="expeditionStatus" aria-live="polite">Сначала соберите предварительные наблюдения на вкладке 02.</p>
+      <div class="empty-card-actions"><button id="startExpedition" type="button" class="primary-button" disabled>Запустить экспедицию</button></div>
+    </div>
     <div id="expeditionContent">
       <div class="expedition-heading">
         <div><h2 id="expeditionTitle"></h2><p id="expeditionSubtitle"></p></div>
@@ -264,9 +271,39 @@ WORKSPACE_SCRIPT = r'''
       __IMPORT_ENGINE__
       __IMPORT_UI__
       __PRELIMINARY_SCRIPT__
-      if (!OBSERVATION_DATA) {
+      const preliminaryTables = ['magnetic_observations','gamma_observations','terrain_observations','outcrop_observations'];
+      function updateExpeditionStart() {
+        if (EXPEDITION_COLLECTED) return;
+        const start = element('startExpedition');
+        const ready = PRELIMINARY_COLLECTED || preliminaryTables.some(name=>observations?.tables[name]?.length);
+        start.disabled = !EXPEDITION_ENDPOINT || !ready;
+        element('expeditionStatus').textContent = !EXPEDITION_ENDPOINT
+          ? 'Для запуска новой экспедиции используйте интерактивный просмотрщик (main.py).'
+          : ready ? 'Предварительные наблюдения готовы. Запустите бурение, опробование, полевые измерения и поиск месторождений.'
+          : 'Сначала соберите предварительные наблюдения или загрузите их вручную на вкладке 02.';
+      }
+      if (!EXPEDITION_COLLECTED) {
         document.getElementById('expeditionEmpty').classList.remove('hidden');
         document.getElementById('expeditionContent').classList.add('hidden');
+        updateExpeditionStart();
+        const start = element('startExpedition');
+        start.addEventListener('click', async () => {
+          if (start.disabled) return;
+          start.disabled = true;
+          element('expeditionStatus').textContent = 'Выполняется разведочная экспедиция и распознавание месторождений…';
+          try {
+            const tables = Object.fromEntries(preliminaryTables.map(name=>[name, observations.tables[name] || []]));
+            const response = await fetch(EXPEDITION_ENDPOINT, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(tables)});
+            if (!response.ok) {
+              const error = await response.json();
+              throw new Error(error.error || 'Ошибка запуска экспедиции');
+            }
+            location.reload();
+          } catch (error) {
+            start.disabled = false;
+            element('expeditionStatus').textContent = 'Не удалось запустить экспедицию. ' + error.message;
+          }
+        });
         return;
       }
       const tables = observations.tables;

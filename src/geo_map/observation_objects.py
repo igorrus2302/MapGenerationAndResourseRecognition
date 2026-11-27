@@ -108,8 +108,9 @@ def _write_objects(bundle: dict[str, Any], directory: Path) -> None:
         sample.setdefault("downhole_properties", []).append(row)
 
     paths, links = _object_layout(groups, tables.get("borehole_collars", []))
-    for folder in (*BOREHOLE_SOURCE_KINDS, "trenches", "surface_geochemistry", "quality_control"):
-        (directory / folder).mkdir(parents=True)
+    if bundle.get("stage") != "preliminary":
+        for folder in (*BOREHOLE_SOURCE_KINDS, "trenches", "surface_geochemistry", "quality_control"):
+            (directory / folder).mkdir(parents=True)
 
     metadata = {"schema_version": bundle["schema_version"], "campaign_id": bundle["campaign"]["campaign_id"]}
     for kind, objects in groups.items():

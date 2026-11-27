@@ -243,7 +243,8 @@ PRELIMINARY_SCRIPT = r'''
         const status = element('preliminaryStatus');
         if(!observations)manual.classList.add('hidden');
         if(!Object.keys(enabled).length && !OBSERVATION_DATA){
-          start.classList.add('hidden');
+          if (!COLLECT_ENDPOINT) start.classList.add('hidden');
+          else start.textContent='Завершить предварительный этап без съёмки';
           status.textContent='Автоматическая съёмка отключена. Можно загрузить свои наблюдения вручную.';
         }
         if(!keys.length)return;
@@ -357,7 +358,7 @@ PRELIMINARY_SCRIPT = r'''
           element('preliminaryPrevious').addEventListener('click', () => { page--; renderTable(); });
           element('preliminaryNext').addEventListener('click', () => { page++; renderTable(); });
           activate(keys[0]);
-          updateImportHint=setupImportControls('preliminary',activeTable,()=>[activeTable()]);
+          updateImportHint=setupImportControls('preliminary',activeTable,()=>[activeTable()],()=>'',updateExpeditionStart);
           refreshPreliminary=()=>activate(active);
           element('preliminaryEmpty').classList.add('hidden');
           element('preliminaryContent').classList.remove('hidden');
@@ -374,7 +375,7 @@ PRELIMINARY_SCRIPT = r'''
           }
           if (start.disabled) return;
           start.disabled = manual.disabled = true;
-          status.textContent = 'Выполняется предварительная съёмка, затем рассчитывается план бурения и результаты поиска…';
+          status.textContent = 'Выполняется только предварительная съёмка…';
           try {
             const response = await fetch(COLLECT_ENDPOINT, {method:'POST'});
             if (!response.ok) throw new Error('Ошибка сбора наблюдений');

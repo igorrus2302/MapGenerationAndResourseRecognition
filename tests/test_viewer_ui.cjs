@@ -120,6 +120,8 @@ canvas.getBoundingClientRect = () => ({left: 0, top: 0});
 vm.runInContext("state.mode = 'vertical-x'; updateControls(); render(); state.mode = '3d'; updateControls(); render()", context);
 const preliminaryCollected = vm.runInContext('PRELIMINARY_COLLECTED', context);
 const collectEndpoint = vm.runInContext('COLLECT_ENDPOINT', context);
+const expeditionEndpoint = vm.runInContext('EXPEDITION_ENDPOINT', context);
+const expeditionCollected = vm.runInContext('EXPEDITION_COLLECTED', context);
 const manualData = vm.runInContext('MANUAL_OBSERVATION_DATA', context);
 if (!observations) assert.ok(Object.values(manualData.tables).every(rows=>rows.length===0));
 
@@ -153,17 +155,39 @@ const hasMethod = key => Boolean(preliminaryPlan ? surveySettings[key] :
   geophysicalTables.includes(key) ? surveySettings.geophysical_survey?.enabled && observations.table_fields[key] :
   surveySettings[key]?.enabled);
 const hasSurvey = [...geophysicalTables, 'terrain_survey', 'outcrops'].some(hasMethod);
-assert.equal(get('collectPreliminary').classList.contains('hidden'), !hasSurvey && !observations);
+assert.equal(get('collectPreliminary').classList.contains('hidden'), !hasSurvey && !observations && !collectEndpoint);
 if (collectEndpoint) {
   assert.equal(observations, null);
   assert.equal(vm.runInContext('RECOGNITION_DATA', context), null);
   assert.ok(Object.values(surveySettings).every(method=>!method.points));
+  assert.ok(expeditionEndpoint);
+  assert.equal(expeditionCollected, false);
+  assert.equal(get('startExpedition').disabled, true);
   if (process.argv.includes('--manual')) {
     get('openManualPreliminary').click();
     assert.equal(get('preliminaryContent').classList.contains('hidden'), false);
     assert.equal(get('preliminaryCount').textContent, '0 записей');
     assert.ok(Object.values(manualData.tables).every(rows=>rows.length===0));
     assert.doesNotMatch(get('geophysicalMap').innerHTML, /data-survey-raster/);
+    (async () => {
+      const row = {campaign_id:manualData.campaign.campaign_id, observation_id:'MANUAL-MAG-01',
+        station_id:'MANUAL-STATION-01', x_m:manualData.campaign.width_m/2, y_m:manualData.campaign.height_m/2,
+        surface_elevation_m:0, magnetic_anomaly_nt:20, magnetic_sigma_nt:1, position_uncertainty_m:0,
+        observation_method:'manual', survey_date:manualData.campaign.date};
+      const input = get('preliminaryImportFile');
+      input.files=[{name:'magnetic.json',text:async()=>JSON.stringify([row])}];
+      await Promise.all(input.fire('change'));
+      assert.equal(get('preliminaryImportStatus').dataset.state,'success',get('preliminaryImportStatus').textContent);
+      assert.equal(get('startExpedition').disabled, false);
+      assert.equal(get('expeditionContent').classList.contains('hidden'), true);
+      let requested;
+      context.fetch = (url,options) => { requested=[url,options.method,JSON.parse(options.body)]; return Promise.resolve({ok:true}); };
+      location.reload=()=>{};
+      get('startExpedition').click();
+      assert.deepEqual(requested.slice(0,2), [expeditionEndpoint,'POST']);
+      assert.deepEqual(requested[2].magnetic_observations,[row]);
+      console.log('Manually loaded preliminary data enables expedition without automatic sampling: OK');
+    })().catch(error=>{console.error(error);process.exitCode=1;});
   } else {
     let requested;
     context.fetch = (url, options) => {
@@ -178,6 +202,28 @@ if (collectEndpoint) {
   }
   assert.equal(get('expeditionContent').classList.contains('hidden'), true);
   console.log('Pending workspace: no observations before explicit collection: OK');
+  if (process.argv.includes('--manual')) return;
+  process.exit(0);
+}
+if (!collectEndpoint && preliminaryCollected && expeditionEndpoint && !expeditionCollected) {
+  assert.ok(observations);
+  assert.equal(vm.runInContext('RECOGNITION_DATA', context), null);
+  assert.equal(observations.summary.hole_count, 0);
+  assert.ok(Object.entries(observations.tables).filter(([name])=>!['magnetic_observations','gamma_observations','terrain_observations','outcrop_observations'].includes(name)).every(([,rows])=>!rows.length));
+  get('tab-expedition').click();
+  assert.equal(get('expeditionEmpty').classList.contains('hidden'), false);
+  assert.equal(get('expeditionContent').classList.contains('hidden'), true);
+  assert.equal(get('startExpedition').disabled, false);
+  assert.equal(get('recognitionContent').classList.contains('hidden'), true);
+  assert.equal(get('mineralsContent').classList.contains('hidden'), true);
+  let requested;
+  context.fetch = (url, options) => { requested=[url,options.method,JSON.parse(options.body)]; return Promise.resolve({ok:true}); };
+  location.reload = () => {};
+  get('startExpedition').click();
+  assert.deepEqual(requested.slice(0,2), [expeditionEndpoint,'POST']);
+  for(const name of Object.keys(requested[2])) assert.equal(JSON.stringify(requested[2][name]), JSON.stringify(observations.tables[name]));
+  assert.equal(get('startExpedition').disabled, true);
+  console.log('Preliminary-only workspace: expedition starts on its own button: OK');
   process.exit(0);
 }
 if (!preliminaryCollected) {

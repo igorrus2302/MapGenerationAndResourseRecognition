@@ -213,6 +213,8 @@ HTML_TEMPLATE = r'''<!doctype html>
     const MANUAL_OBSERVATION_DATA = __MANUAL_OBSERVATION_DATA__;
     const PRELIMINARY_COLLECTED = __PRELIMINARY_COLLECTED__;
     const COLLECT_ENDPOINT = __COLLECT_ENDPOINT__;
+    const EXPEDITION_ENDPOINT = __EXPEDITION_ENDPOINT__;
+    const EXPEDITION_COLLECTED = __EXPEDITION_COLLECTED__;
 
     const canvas = document.getElementById('mapCanvas');
     const ctx = canvas.getContext('2d');
@@ -917,7 +919,8 @@ def _manual_observation_bundle(data: dict[str, Any], config: dict[str, Any]) -> 
 def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[str, Any] | None = None,
                  recognition: dict[str, Any] | None = None, observation_config: dict[str, Any] | None = None,
                  observation_seed: int | None = None, collect_endpoint: str | None = None,
-                 preliminary_collected: bool = False) -> Path:
+                 preliminary_collected: bool = False, expedition_endpoint: str | None = None,
+                 expedition_collected: bool | None = None) -> Path:
     """Create an offline workspace for truth, surveys, fieldwork, recognition and comparison."""
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -927,13 +930,15 @@ def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[s
         observations = split_legacy_geophysical_bundle(observations)
     if observations is not None:
         observations = with_magnetic_log_schema(observations)
+    if expedition_collected is None:
+        expedition_collected = observations is not None and observations.get("stage") != "preliminary"
     public_observations = json.dumps(observations, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
     public_recognition = json.dumps(recognition, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
     if observation_config is None and observations is None:
         config_path = Path(__file__).resolve().parents[2] / "config/observations.json"
         observation_config = json.loads(config_path.read_text(encoding="utf-8"))
     preliminary_plan = None
-    if observation_config is not None and not legacy_survey:
+    if observation_config is not None and observations is None and not legacy_survey:
         seed = data.get("seed", 0) if observation_seed is None else observation_seed
         if collect_endpoint:
             # The server prepares sampling coordinates and reads the true map
@@ -972,7 +977,9 @@ def build_viewer(data: dict[str, Any], path: str | Path, *, observations: dict[s
                          "__PRELIMINARY_PLAN__": embedded_plan,
                          "__MANUAL_OBSERVATION_DATA__": json.dumps(manual_bundle, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/"),
                          "__PRELIMINARY_COLLECTED__": json.dumps(preliminary_collected),
-                         "__COLLECT_ENDPOINT__": json.dumps(collect_endpoint)}
+                         "__COLLECT_ENDPOINT__": json.dumps(collect_endpoint),
+                         "__EXPEDITION_ENDPOINT__": json.dumps(expedition_endpoint),
+                         "__EXPEDITION_COLLECTED__": json.dumps(expedition_collected)}
     html = re.sub("|".join(data_replacements), lambda match: data_replacements[match.group()], html)
     output_path.write_text(html, encoding="utf-8")
     return output_path

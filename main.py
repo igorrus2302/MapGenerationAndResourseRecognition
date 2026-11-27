@@ -18,6 +18,7 @@ from geo_map import (
 )
 from geo_map.recognition import recognize_deposits, save_recognition
 from geo_map.geophysics import add_geophysical_fields
+from geo_map.observations import generate_preliminary_observations, save_preliminary_observations
 from geo_map.workspace_server import serve_workspace
 
 
@@ -110,14 +111,22 @@ def main() -> None:
     prepare_run_output(data, args.output, input_paths=(args.map, args.config, args.rocks,
                                                       args.minerals, args.observations_config))
 
-    def collect() -> Path:
+    def collect_preliminary() -> dict:
+        preliminary = generate_preliminary_observations(data, observation_config, seed=observation_seed)
+        path = save_preliminary_observations(preliminary, args.output / "observations")
+        print(f"Предварительные наблюдения сохранены: {path}", flush=True)
+        print("Для запуска разведочной экспедиции нажмите кнопку на вкладке 03.", flush=True)
+        return preliminary
+
+    def collect(preliminary_tables=None) -> Path:
         return run_expedition(data, args.output, observation_config, observation_seed,
-                              mineral_catalog, rock_catalog, preliminary_collected=not args.batch)
+                              mineral_catalog, rock_catalog, preliminary_collected=not args.batch,
+                              preliminary_tables=preliminary_tables)
 
     if args.batch:
         collect()
     else:
-        serve_workspace(data, observation_config, observation_seed, collect,
+        serve_workspace(data, observation_config, observation_seed, collect_preliminary, collect,
                         port=args.port, open_browser=not args.no_browser)
 
 
@@ -154,10 +163,11 @@ def prepare_run_output(data: dict, output: Path, *, input_paths: tuple[Path | No
 
 
 def run_expedition(data: dict, output: Path, observation_config: dict, observation_seed: int,
-                   mineral_catalog: dict, rock_catalog: dict, *, preliminary_collected: bool) -> Path:
+                   mineral_catalog: dict, rock_catalog: dict, *, preliminary_collected: bool,
+                   preliminary_tables: dict | None = None) -> Path:
     """Generate all dependent stages after collection is requested, and persist the result."""
     observations = generate_observations(data, observation_config, seed=observation_seed,
-                                         mineral_catalog=mineral_catalog)
+                                         mineral_catalog=mineral_catalog, preliminary_tables=preliminary_tables)
     recognition = recognize_deposits(observations, mineral_catalog, rock_catalog=rock_catalog)
     map_path = save_map(data, output / "map.json")
     observation_path = save_observations(observations, output / "observations")

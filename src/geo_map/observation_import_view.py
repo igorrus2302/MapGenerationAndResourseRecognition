@@ -81,13 +81,13 @@ IMPORT_UI = r'''
             const result=ObservationImport.apply(observations,payload,{allowedTables:allowed,rockReference:OBSERVATION_IMPORT_ROCKS,sourceKind:kind,filename:file.name});
             let renderingWarning='';
             if(result.added){
-              markRecognitionStale();
+              if (EXPEDITION_COLLECTED) markRecognitionStale();
               try {refreshFieldwork();refreshPreliminary();afterImport();}
               catch(error){renderingWarning='\nДанные приняты, но не удалось обновить отображение: '+error.message+'. Скачайте объединённый JSON.';}
             }
             status.dataset.state=result.added?'success':'duplicate';
             const detail=Object.entries(result.byTable).map(([name,v])=>name+': добавлено '+v.added+', повторов '+v.duplicates).join('\n');
-            status.textContent=(result.added?'Файл принят. Добавлено записей: '+result.added+'. Точных повторов пропущено: '+result.duplicates+'.':'Файл уже представлен в наблюдениях. Все '+result.duplicates+' записей — точные дубликаты; данные не изменены.')+'\n'+detail+(result.added?'\nСохраните обновлённый JSON, чтобы использовать новые наблюдения после закрытия страницы.':'')+renderingWarning;
+            status.textContent=(result.added?'Файл принят. Добавлено записей: '+result.added+'. Точных повторов пропущено: '+result.duplicates+'.':'Файл уже представлен в наблюдениях. Все '+result.duplicates+' записей — точные дубликаты; данные не изменены.')+'\n'+detail+(result.added?(!EXPEDITION_COLLECTED&&EXPEDITION_ENDPOINT?'\nНовые наблюдения будут использованы при запуске экспедиции на вкладке 03.':'\nСохраните обновлённый JSON, чтобы использовать новые наблюдения после закрытия страницы.'):'')+renderingWarning;
           }catch(error){
             status.dataset.state='error';status.textContent='Файл отклонён: '+error.message+'\nНаблюдения не изменены.';
           }finally{input.disabled=false;chooseButton.disabled=false;input.value='';}

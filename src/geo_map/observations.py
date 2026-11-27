@@ -15,7 +15,7 @@ from .boreholes import collar_bounds, orientation, validate_trajectory
 from .downhole_gamma import DEFAULT_SETTINGS as GAMMA_LOG_DEFAULTS, DownholeGammaLogger, TABLE_FIELDS as GAMMA_LOG_FIELDS, validate_gamma_logging
 from .downhole_magnetic import DEFAULT_SETTINGS as MAGNETIC_LOG_DEFAULTS, DownholeMagneticLogger, TABLE_FIELDS as MAGNETIC_LOG_FIELDS, validate_magnetic_logging
 from .drilling_plan import DEFAULT_RANDOM_FRACTION, target_boreholes
-from .geophysical_observations import GEOPHYSICAL_DIRECTORIES, GEOPHYSICAL_TABLES, LEGACY_GEOPHYSICAL_TABLE, split_legacy_geophysical_bundle
+from .geophysical_observations import GEOPHYSICAL_DIRECTORIES, GEOPHYSICAL_TABLES, LEGACY_GEOPHYSICAL_TABLE, point_geojson, split_legacy_geophysical_bundle
 from .observation_tools import TruthSampler, _number, _rng, measure_grade
 from .observation_models import EXTRA_TABLE_FIELDS, extend_campaign, survey_preliminary, validate_extensions
 from .observation_objects import save_observation_objects
@@ -32,6 +32,7 @@ TABLE_FIELDS = {
     "structural_observations": "campaign_id observation_id hole_id x_m y_m depth_m feature_type strike_deg dip_deg dip_direction_deg offset_estimate_m confidence observation_method notes".split(),
 }
 TABLE_FIELDS.update(EXTRA_TABLE_FIELDS)
+PRELIMINARY_TABLES = (*GEOPHYSICAL_TABLES.values(), "terrain_observations", "outcrop_observations")
 
 SUMMARY_FOLDERS = {
     **dict.fromkeys(BOREHOLE_SOURCE_TABLES, "boreholes"),
@@ -162,8 +163,42 @@ def _plan_holes(dimensions: dict[str, Any], drilling: dict[str, Any], seed: int,
     return holes
 
 
+def generate_preliminary_observations(truth_map: dict[str, Any], config: dict[str, Any], seed: int | None = None) -> dict[str, Any]:
+    """Collect only the four surface survey channels, without planning any drilling."""
+    seed = secrets.randbits(63) if seed is None else int(seed)
+    dimensions = truth_map["dimensions"]
+    settings = {name: config.get(name, {}) for name in ("geophysical_survey", "terrain_survey", "outcrops")}
+    validate_extensions(settings, dimensions)
+    tables = {name: [] for name in TABLE_FIELDS}
+
+    def append(table: str, **values: Any) -> None:
+        row = dict.fromkeys(TABLE_FIELDS[table])
+        row.update(campaign_id=config["campaign_id"], **values)
+        tables[table].append(row)
+
+    survey_preliminary(truth_map, config, seed, TruthSampler(truth_map), append)
+    observed_ids = {row["observed_rock_id"] for row in tables["outcrop_observations"]}
+    return {
+        "schema_version": "1.9", "data_kind": "exploration_observations", "stage": "preliminary",
+        "campaign": {"campaign_id": config["campaign_id"], "title": config["title"], "date": config["date"],
+                     "coordinate_system": "local_cartesian", "width_m": dimensions["width_m"], "height_m": dimensions["height_m"]},
+        "plan": {"layout": config["drilling"].get("layout", "grid"), "sample_length_m": config["drilling"]["sample_length_m"],
+                 "borehole_path": "straight", "borehole_depth_reference": "measured_depth_m", "ideal": config.get("ideal", False),
+                 "analytes": [{key: item[key] for key in ("analyte", "unit", "detection_limit")} for item in config["analytes"]],
+                 "methods": deepcopy(settings)},
+        "summary": {"hole_count": 0, "sample_count": 0, "assay_count": 0,
+                    "outcrop_count": len(tables["outcrop_observations"]), "terrain_observation_count": len(tables["terrain_observations"]),
+                    "geophysical_observation_count": len({row["station_id"] for table in GEOPHYSICAL_TABLES.values() for row in tables[table]}),
+                    **{f"{method}_observation_count": len(tables[table]) for method, table in GEOPHYSICAL_TABLES.items()}},
+        "rock_catalog": [{key: rock[key] for key in ("id", "name", "color")} for rock in truth_map["rocks"] if rock["id"] in observed_ids],
+        "table_fields": deepcopy(TABLE_FIELDS), "tables": tables, "notes": [], "borehole_sources": [],
+        "geojson": {name: point_geojson(name, tables[name], dimensions) for name in PRELIMINARY_TABLES},
+    }
+
+
 def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], seed: int | None = None, *,
-                          mineral_catalog: dict[str, Any] | None = None) -> dict[str, Any]:
+                          mineral_catalog: dict[str, Any] | None = None,
+                          preliminary_tables: dict[str, list[dict[str, Any]]] | None = None) -> dict[str, Any]:
     """Return measured data only; latent sample values never leave this function."""
     config = deepcopy(config)
     dimensions = truth_map["dimensions"]
@@ -189,7 +224,12 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
         row.update(values)
         tables[table].append(row)
 
-    survey_preliminary(truth_map, config, seed, sampler, append)
+    if preliminary_tables is None:
+        survey_preliminary(truth_map, config, seed, sampler, append)
+    else:
+        # Preserve the actual measurements used to choose drilling locations.
+        for name in PRELIMINARY_TABLES:
+            tables[name] = deepcopy(preliminary_tables[name])
     drilling = config["drilling"]
     geophysical_channels = {method: tables[table] for method, table in GEOPHYSICAL_TABLES.items()}
     holes = _plan_holes(dimensions, drilling, seed, geophysical_channels=geophysical_channels)
@@ -329,7 +369,8 @@ def generate_observations(truth_map: dict[str, Any], config: dict[str, Any], see
     return bundle
 
 
-def _save_bundle(bundle: dict[str, Any], directory: str | Path, *, group_tables: bool = False) -> Path:
+def _save_bundle(bundle: dict[str, Any], directory: str | Path, *, group_tables: bool = False,
+                 table_names: tuple[str, ...] | None = None) -> Path:
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -343,12 +384,21 @@ def _save_bundle(bundle: dict[str, Any], directory: str | Path, *, group_tables:
     output = directory / "observations.json"
     output.write_text(json.dumps(bundle, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
     for name, fields in bundle["table_fields"].items():
+        if table_names is not None and name not in table_names:
+            continue
         with export_path(name, "csv").open("w", encoding="utf-8", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=fields)
             writer.writeheader()
             writer.writerows(bundle["tables"][name])
     for name, data in bundle.get("geojson", {}).items():
         export_path(name, "geojson").write_text(json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
+    return output
+
+
+def save_preliminary_observations(bundle: dict[str, Any], directory: str | Path) -> Path:
+    """Persist survey data only; drilling files are created by the next stage."""
+    output = _save_bundle(bundle, directory, group_tables=True, table_names=PRELIMINARY_TABLES)
+    save_observation_objects(bundle, output.parent)
     return output
 
 
